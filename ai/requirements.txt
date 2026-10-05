@@ -1,0 +1,6 @@
+opencv-python-headless
+ultralytics
+paho-mqtt
+scikit-learn
+numpy
+python-dotenv

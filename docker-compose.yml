@@ -1,0 +1,47 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: sentinel-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+    volumes:
+      - ./infra/mosquitto/config:/mosquitto/config:ro
+      - ./infra/mosquitto/certs:/mosquitto/certs:ro
+      - mqtt_data:/mosquitto/data
+      - mqtt_logs:/mosquitto/log
+
+  db:
+    image: postgres:16-alpine
+    container_name: sentinel-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  # L'équipe API peut activer ce service dès qu'un Dockerfile existe dans backend/.
+  # api:
+  #   build: ./backend
+  #   container_name: sentinel-api
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   depends_on:
+  #     - mqtt
+  #     - db
+  #   ports:
+  #     - "8000:8000"
+
+  # Le frontend peut être lancé en dev localement puis conteneurisé le dernier jour.
+
+volumes:
+  mqtt_data:
+  mqtt_logs:
+  postgres_data:
