@@ -1,6 +1,6 @@
-opencv-python-headless
+opencv-python
 ultralytics
-paho-mqtt
+paho-mqtt>=2.0
 scikit-learn
 numpy
 python-dotenv

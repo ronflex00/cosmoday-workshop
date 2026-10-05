@@ -1,0 +1,3 @@
+# Downloaded model weights stay local.
+*.pt
+*.onnx
