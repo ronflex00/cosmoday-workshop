@@ -8,7 +8,7 @@ import Header from './components/Header';
 import SensorCard from './components/SensorCard';
 import StatusBadge from './components/StatusBadge';
 import SystemStatus from './components/SystemStatus';
-import VisionPanel from './components/VisionPanel';
+import VisionDashboard from './components/VisionDashboard';
 import { useNow } from './hooks/useNow';
 import { useSentinelSocket } from './hooks/useSentinelSocket';
 import { formatNumber, formatTime } from './utils/format';
@@ -18,6 +18,12 @@ import type { Tone } from './utils/status';
 const SensorChart = lazy(() => import('./components/SensorChart'));
 
 export default function App() {
+  return window.location.pathname.replace(/\/+$/, '') === '/vision'
+    ? <VisionDashboard />
+    : <OverviewDashboard />;
+}
+
+function OverviewDashboard() {
   const { state, connected, error, receivedAt } = useSentinelSocket();
   const now = useNow();
   const online = connected && !!state?.system.mqtt_connected;
@@ -37,7 +43,7 @@ export default function App() {
   const readingDetail = !telemetry ? 'Awaiting telemetry' : !online ? 'Last known reading' : !telemetryFresh ? 'Stale reading' : 'Live reading';
   return (
     <>
-      <Header online={online} deviceId={telemetry?.device_id} now={now} />
+      <Header online={online} deviceId={telemetry?.device_id} now={now} currentPage="overview" />
       <main id="overview" className="dashboard-shell">
         <div className="overview-heading flex flex-wrap items-center justify-between gap-4">
           <div><h1>Security overview</h1></div>
@@ -62,7 +68,6 @@ export default function App() {
         </section>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" id="ai">
-          <VisionPanel vision={state?.vision ?? null} fresh={visionFresh} online={online} />
           <AnomalyPanel anomaly={state?.anomaly ?? null} fresh={anomalyFresh} online={online} />
         </div>
 

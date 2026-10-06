@@ -11,6 +11,7 @@
 
 ```text
 Webcam USB → OpenCV → YOLO person → sentinel/ai/vision → Mosquitto
+                  └→ annotated MJPEG stream → AI Vision dashboard
 
 ESP8266 / simulateur → sentinel/telemetry → callback MQTT
                                               │ validation JSON
@@ -170,6 +171,9 @@ chemin relatif est résolu depuis le répertoire de lancement (`ai/`).
 | `AI_PROCESS_EVERY_N_FRAMES` | `3` | Traiter une frame sur N, N ≥ 1 |
 | `AI_INFERENCE_SIZE` | `320` | Taille d'entrée de l'inférence |
 | `AI_SHOW_WINDOW` | `false` | Fenêtre debug, rectangles et confiance |
+| `AI_VISION_STREAM_HOST` | `127.0.0.1` | Interface HTTP locale du flux webcam |
+| `AI_VISION_STREAM_PORT` | `8765` | Port HTTP du flux MJPEG et des métriques vision |
+| `AI_VISION_STREAM_ORIGIN` | `http://localhost:5173` | Origine frontend autorisée à lire les métriques |
 | `AI_TRAINING_SAMPLES` | `20` | Nombre de mesures de référence, minimum 2 |
 | `AI_CONTAMINATION` | `0.1` | Réglage du seuil IsolationForest, dans `(0, 0.5]` |
 | `AI_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` ou `CRITICAL` |
@@ -195,6 +199,9 @@ AI_CONFIDENCE=0.55
 AI_PROCESS_EVERY_N_FRAMES=3
 AI_INFERENCE_SIZE=320
 AI_SHOW_WINDOW=false
+AI_VISION_STREAM_HOST=127.0.0.1
+AI_VISION_STREAM_PORT=8765
+AI_VISION_STREAM_ORIGIN=http://localhost:5173
 AI_TRAINING_SAMPLES=20
 AI_CONTAMINATION=0.1
 AI_LOG_LEVEL=INFO
@@ -223,6 +230,15 @@ worker termine son traitement courant, puis la boucle réseau MQTT s'arrête.
 Une erreur de caméra arrête le service avec un code non nul ; elle ne publie pas
 une fausse absence de personne. Une panne MQTT déclenche des tentatives de
 reconnexion avec un délai croissant de 1 à 30 secondes.
+
+Après l'ouverture de la caméra, le service sert les images annotées sur
+`http://localhost:8765/stream.mjpg` et les métriques sur
+`http://localhost:8765/metrics`. Ouvrir le frontend sur `/vision`. Pour un
+frontend provenant d'une autre machine, configurer `AI_VISION_STREAM_HOST` sur
+l'interface réseau de l'IA, `AI_VISION_STREAM_ORIGIN` sur l'origine exacte du
+frontend et `VITE_VISION_STREAM_URL` dans `frontend/.env` vers l'URL du flux.
+Le serveur du flux n'a pas d'authentification : ne pas l'exposer à un réseau non
+fiable.
 
 ## Topics MQTT
 

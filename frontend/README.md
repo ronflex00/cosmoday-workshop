@@ -21,6 +21,7 @@ npm run dev
 
 Ouvrir **http://localhost:5173**. Le serveur refuse de changer automatiquement de
 port si `5173` est occupé, afin de conserver l'origine autorisée par le backend.
+Le dashboard séparé de vision est disponible sur **http://localhost:5173/vision**.
 
 ## Configuration
 
@@ -28,12 +29,19 @@ port si `5173` est occupé, afin de conserver l'origine autorisée par le backen
 VITE_API_URL=http://localhost:8000
 VITE_WS_URL=ws://localhost:8000/ws
 VITE_DATA_STALE_SECONDS=30
+VITE_VISION_STREAM_URL=http://localhost:8765/stream.mjpg
 ```
 
 Ces URL sont utilisées par le navigateur. Pour accéder à une API sur une autre
 machine, modifier les deux variables dans `frontend/.env`, puis relancer Vite.
 Le backend doit autoriser l'origine du frontend dans `CORS_ORIGINS`, y compris
 son port, pour REST et WebSocket. En local, son défaut est `http://localhost:5173`.
+Le flux MJPEG et ses métriques sont servis par le processus Python caméra, pas par
+MQTT. Par défaut, le frontend cible `localhost:8765`; pour une caméra sur une autre
+machine, définir `VITE_VISION_STREAM_URL` dans `frontend/.env` avec l'URL accessible
+depuis le navigateur et `AI_VISION_STREAM_ORIGIN` dans la configuration IA avec
+l'origine du frontend. Le flux vidéo n'est pas authentifié : le garder sur un réseau
+de confiance.
 
 Si `VITE_WS_URL` n'est pas définie, elle est dérivée de `VITE_API_URL` avec
 `ws://` ou `wss://` et le chemin `/ws`. Les variables Vite sont intégrées au build ;
@@ -51,9 +59,9 @@ Les horloges du PC et des appareils doivent être synchronisées.
   et heure de la dernière mise à jour backend.
 - **Environment** : température en °C, humidité en %, gaz en valeur brute et
   mouvement YES/NO. Les données absentes affichent `—`, ou UNKNOWN pour le mouvement.
-- **AI Vision** : présence YES/NO, confiance en pourcentage, source caméra et
-  timestamp. Les états CLEAR et INTRUSION s'accompagnent respectivement d'un
-  panneau vert ou rouge ; le badge CAMERA ONLINE signale un résultat actuel.
+- **AI Vision** (`/vision`) : flux USB annoté par YOLO, détection, confiance,
+  FPS d'inférence, latence mesurée, modèle et changements d'état détectés pendant
+  la session. Aucun chiffre n'est simulé ; les métriques absentes affichent `—`.
 - **AI Environment** : CALIBRATING lorsque `ready=false`, NORMAL lorsque
   `ready=true/anomaly=false`, ANOMALY lorsque `ready=true/anomaly=true`. Le score
   reste `—` pendant la calibration, puis s'affiche avec trois décimales.

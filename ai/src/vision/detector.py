@@ -14,6 +14,7 @@ logger = logging.getLogger("VISION")
 class PersonDetection:
     confidence: float
     boxes: tuple
+    latency_ms: float = 0.0
 
     @property
     def person_detected(self) -> bool:
@@ -24,6 +25,7 @@ class PersonDetector:
     def __init__(self, model: str, confidence: float, inference_size: int):
         self.threshold = confidence
         self.inference_size = inference_size
+        self.model_name = model
         self._inference_seconds = 0.0
         self._inference_count = 0
         try:
@@ -42,7 +44,8 @@ class PersonDetector:
         result = self.model.predict(source=frame, device="cpu",
                                     classes=[self.person_class], conf=self.threshold,
                                     imgsz=self.inference_size, verbose=False)[0]
-        self._inference_seconds += time.perf_counter() - started
+        latency_seconds = time.perf_counter() - started
+        self._inference_seconds += latency_seconds
         self._inference_count += 1
         if self._inference_count % 30 == 0:
             mean = self._inference_seconds / self._inference_count
@@ -53,7 +56,8 @@ class PersonDetector:
             for coordinates, score in zip(result.boxes.xyxy.cpu().tolist(),
                                           result.boxes.conf.cpu().tolist()):
                 boxes.append((*coordinates, float(score)))
-        return PersonDetection(max((box[4] for box in boxes), default=0.0), tuple(boxes))
+        return PersonDetection(max((box[4] for box in boxes), default=0.0),
+                               tuple(boxes), latency_seconds * 1000)
 
     @staticmethod
     def annotate(frame, detection: PersonDetection):

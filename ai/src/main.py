@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import time
+from datetime import datetime, timezone
 from queue import Queue
 from threading import Event, Thread
 
@@ -17,6 +18,7 @@ from .common.schemas import VISION_TOPIC, VisionResult, utc_timestamp
 from .config import Config
 from .vision.camera import Camera
 from .vision.detector import PersonDetector
+from .vision.stream import VisionStream
 
 logger = logging.getLogger("AI")
 
@@ -52,6 +54,7 @@ def main() -> int:
     mqtt_client = None
     anomaly_worker = None
     camera = None
+    vision_stream = None
     show_window = False
     window_open = False
     previous_handlers = {}
@@ -79,8 +82,15 @@ def main() -> int:
             return 0
         camera = Camera(config.camera_index, config.camera_width, config.camera_height)
         camera.open()
+        vision_stream = VisionStream(config.vision_stream_host, config.vision_stream_port,
+                                     config.vision_stream_origin)
+        vision_stream.start()
         publisher = VisionPublisher(mqtt_client, f"camera-{config.camera_index}")
         frame_number = 0
+        inference_count = 0
+        inference_fps = 0.0
+        fps_window_started = time.monotonic()
+        detection = None
         while not stop.is_set():
             frame = camera.read()
             process = frame_number % config.process_every_n_frames == 0
@@ -88,11 +98,32 @@ def main() -> int:
             if not process:
                 continue
             detection = detector.detect(frame)
+            inference_count += 1
+            now = time.monotonic()
+            elapsed = now - fps_window_started
+            if elapsed >= 1:
+                inference_fps = inference_count / elapsed
+                inference_count = 0
+                fps_window_started = now
             if stop.is_set():
                 break
             publisher.publish(detection, time.monotonic())
+            annotated = detector.annotate(frame, detection)
+            encoded, jpeg = cv2.imencode(
+                ".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if not encoded:
+                raise RuntimeError("Could not encode the annotated camera frame")
+            vision_stream.publish(jpeg.tobytes(), {
+                "status": "active",
+                "model": detector.model_name,
+                "fps": round(inference_fps, 1),
+                "latency_ms": round(detection.latency_ms, 1),
+                "person_detected": detection.person_detected,
+                "confidence": detection.confidence,
+                "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            })
             if show_window:
-                cv2.imshow("Sentinel-X - press Q to stop", detector.annotate(frame, detection))
+                cv2.imshow("Sentinel-X - press Q to stop", annotated)
                 window_open = True
                 if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                     stop.set()
@@ -107,6 +138,11 @@ def main() -> int:
         return 1
     finally:
         stop.set()
+        if vision_stream is not None:
+            try:
+                vision_stream.stop()
+            except Exception:
+                logger.exception("Could not stop the vision stream cleanly")
         if camera is not None:
             try:
                 camera.close()

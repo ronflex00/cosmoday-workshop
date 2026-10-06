@@ -49,6 +49,9 @@ class Config:
     inference_size: int = 320
     process_every_n_frames: int = 3
     show_window: bool = False
+    vision_stream_host: str = "127.0.0.1"
+    vision_stream_port: int = 8765
+    vision_stream_origin: str = "http://localhost:5173"
     training_samples: int = 20
     contamination: float = 0.1
     log_level: str = "INFO"
@@ -77,8 +80,14 @@ class Config:
             raise ValueError("AI_CONTAMINATION must be in (0, 0.5]")
         host = _value("MQTT_HOST", "localhost").strip()
         model = _value("AI_YOLO_MODEL", "yolov8n.pt", "AI_MODEL").strip()
-        if not host or not model:
-            raise ValueError("MQTT_HOST and AI_YOLO_MODEL must not be empty")
+        stream_host = _value("AI_VISION_STREAM_HOST", "127.0.0.1").strip()
+        stream_port = _integer("AI_VISION_STREAM_PORT", 8765)
+        stream_origin = _value("AI_VISION_STREAM_ORIGIN", "http://localhost:5173").strip()
+        if stream_port > 65535:
+            raise ValueError("AI_VISION_STREAM_PORT must be <= 65535")
+        if not host or not model or not stream_host or not stream_origin:
+            raise ValueError("MQTT_HOST, AI_YOLO_MODEL, AI_VISION_STREAM_HOST and "
+                             "AI_VISION_STREAM_ORIGIN must not be empty")
         username = _value("MQTT_USERNAME", "")
         password = _value("MQTT_PASSWORD", "")
         if password and not username:
@@ -103,6 +112,9 @@ class Config:
             process_every_n_frames=_integer("AI_PROCESS_EVERY_N_FRAMES", 3,
                                            legacy="AI_FRAME_SKIP"),
             show_window=_boolean("AI_SHOW_WINDOW"),
+            vision_stream_host=stream_host,
+            vision_stream_port=stream_port,
+            vision_stream_origin=stream_origin,
             training_samples=_integer("AI_TRAINING_SAMPLES", 20, minimum=2),
             contamination=contamination,
             log_level=log_level,
