@@ -1,0 +1,5 @@
+# Lightweight setup for --no-camera; uses the existing IsolationForest service.
+scikit-learn
+numpy
+paho-mqtt==2.1.0
+python-dotenv==1.2.4

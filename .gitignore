@@ -38,3 +38,6 @@ runs/
 models/*.pt
 models/*.onnx
 captures/
+
+# Local service logs and process metadata
+.runtime/
