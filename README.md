@@ -2,6 +2,69 @@
 
 Monorepo du prototype SENTINEL-X : surveillance environnementale, détection d'intrusion, dashboard temps réel et sécurisation locale.
 
+## Récupérer et lancer la version complète
+
+La branche **`feat/integration`** réunit le backend, le dashboard et l'IA validée.
+Un seul clone suffit ; aucun worktree voisin ni chemin personnel n'est requis.
+
+Prérequis : **Linux**, **Python 3.11+**, **Node.js 20.19+ dans la série 20, ou 22.12+**,
+`npm`, `mosquitto`, `mosquitto_sub` et une webcam pour la vision. Les bibliothèques
+système OpenCV GL/GLib sont détaillées dans [ai/README.md](ai/README.md).
+Une connexion Internet est nécessaire pour la première installation des
+dépendances et du modèle YOLO. Aucun GPU ni PostgreSQL n'est requis.
+
+Sur Debian/Ubuntu, installer `python3-venv`, `mosquitto` et
+`mosquitto-clients` avec le gestionnaire système avant le script. Installer
+aussi les bibliothèques GL/GLib pour le mode webcam. Node et npm doivent être
+disponibles dans les versions indiquées ci-dessus.
+
+```bash
+git clone --branch feat/integration --single-branch https://github.com/ronflex00/cosmoday-workshop.git
+cd cosmoday-workshop
+bash scripts/setup_local.sh
+python3 scripts/local.py start
+```
+
+Ouvrir **http://localhost:5173**. Le lanceur démarre Mosquitto (`18883`),
+FastAPI (`8000`), React (`5173`), YOLO sur la webcam et IsolationForest.
+Il attend l'abonnement IA avant de démarrer les capteurs simulés : 20 mesures
+normales, puis cinq valeurs extrêmes, répétées sous l'identifiant `sentinel-demo`.
+La décision d'anomalie vient du modèle. Les services restent en arrière-plan.
+
+```bash
+python3 scripts/local.py status
+python3 scripts/local.py stop
+```
+
+Les logs sont dans `.runtime/`. Le stop concerne uniquement les processus
+démarrés par ce lanceur ; un broker préexistant réutilisé est conservé.
+Les ports API/frontend déjà occupés sont signalés, sans arrêter leur propriétaire.
+
+Sans webcam, installation et lancement plus légers :
+
+```bash
+bash scripts/setup_local.sh --no-camera
+python3 scripts/local.py start --no-camera
+```
+
+Ce mode conserve la télémétrie, IsolationForest, le dashboard et les commandes.
+Le panneau vision reste en attente ; aucune détection caméra fictive n'est publiée.
+Pour utiliser les mesures d'un ESP à la place du simulateur, ajouter `--no-demo`.
+LED/buzzer nécessitent le matériel connecté ; le dashboard confirme l'envoi MQTT.
+
+Configuration optionnelle, sans modifier le code :
+
+```bash
+cp -n local.env.example .env.local
+```
+
+Modifier hôte/port MQTT, ports API/frontend, index caméra ou paramètres IA dans
+`.env.local`, puis arrêter et relancer le lanceur. Les variables du terminal
+ont priorité. Les URL API/WebSocket et CORS suivent les ports configurés, sauf
+override explicite. Le profil local est distinct du `.env` racine destiné à
+l'infrastructure ; les profils réels, logs, venvs, dépendances et poids du modèle
+sont ignorés par Git.
+
 ## Architecture rapide
 
 ```text
@@ -102,21 +165,34 @@ tourner sur le même port que le backend.
 
 ## Vérification avant la démo
 
-```bash
-cd backend
-.venv/bin/python -m unittest discover -s tests -v
-```
-
-Puis, depuis la racine dans un autre terminal :
+Depuis la racine, après l'installation complète avec webcam :
 
 ```bash
-cd frontend
-npm run build
+python3 -m unittest discover -s tests -v
+(cd ai && .venv/bin/python -m unittest discover -s tests -v)
+(cd backend && .venv/bin/python -m unittest discover -s tests -v)
+(cd frontend && npm run build)
 ```
 
-Le build vérifie aussi TypeScript et produit `frontend/dist/`.
-Les tests backend ne nécessitent pas de broker ; le guide de démo couvre le flux
-réel MQTT → IA → API → React et les commandes dans le sens inverse.
+Cela couvre les 19 tests IA, les 31 tests backend, les deux tests de propriété
+des processus du lanceur et le build TypeScript/React. Les tests IA importent
+la vision ; ils nécessitent donc l'installation complète, même sans webcam
+branchée. L'installation `--no-camera` suffit pour les tests backend et lanceur.
+
+Pour vérifier le flux réel, lancer la démo et observer l'état reçu :
+
+```bash
+curl --fail http://localhost:8000/health
+curl --fail http://localhost:8000/api/v1/state
+mosquitto_sub -h localhost -p 18883 -t sentinel/ai/anomaly -v
+```
+
+Adapter les ports si `.env.local` a été personnalisé. Dans le dashboard,
+la télémétrie apparaît puis l'IA passe de CALIBRATING à NORMAL/ANOMALY après
+20 mesures. Les boutons publient sur `sentinel/commands` ; le lanceur écrit
+ces messages dans `.runtime/events.log` avec le profil local par défaut.
+Le build produit `frontend/dist/`. Les tests unitaires ne nécessitent pas de
+broker ; le guide de démo couvre le flux MQTT → IA → API → React et les commandes.
 
 L'état, la calibration IA et les historiques sont en mémoire. Un redémarrage
 du backend efface son état ; un redémarrage de l'IA relance sa calibration.
@@ -140,10 +216,10 @@ restent à intégrer avec l'équipe infra. La webcam appartient au service IA.
 
 ## Travail dans cette branche
 
-L'implémentation backend/dashboard est sur `feat/api-dashboard`. L'IA validée
-est développée séparément sur `feat/ai`. Dans ce workspace, les deux branches
-sont ouvertes dans les dossiers voisins `Sentinel-X-api-dashboard/` et
-`Sentinel-X/`. Les instructions locales précisent les chemins correspondants.
+`feat/integration` est la version complète à récupérer pour lancer la démo.
+Les branches `feat/api-dashboard` et `feat/ai` conservent leurs développements
+séparés. La branche d'intégration contient les deux historiques, et n'ajoute
+aucune dépendance au Raspberry pour une démonstration sur PC.
 Les fichiers `.env`, dépendances installées et builds sont ignorés par Git.
 Les commits et pushes sont déclenchés uniquement sur demande explicite.
 

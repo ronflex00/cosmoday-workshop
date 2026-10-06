@@ -1,5 +1,30 @@
 # Démo locale Sentinel-X
 
+## Lancement complet depuis un seul clone
+
+Utiliser la branche `feat/integration` pour récupérer backend, frontend et IA
+ensemble. Depuis la racine du clone, après les prérequis Linux du README :
+
+```bash
+bash scripts/setup_local.sh
+python3 scripts/local.py start
+```
+
+Le lanceur attend les connexions avant d'envoyer les mesures, garde les services
+en arrière-plan et écrit les logs dans `.runtime/`. `status` affiche les
+processus ; `stop` ferme uniquement ceux démarrés par le lanceur. Les variables
+optionnelles se placent dans `.env.local`, à partir de `local.env.example`.
+
+Sans webcam : utiliser `--no-camera` sur les deux commandes. Pour un ESP réel :
+ajouter `--no-demo` au lancement afin de ne pas mélanger les références capteurs.
+Le lancement local ne crée ni certificat ni listener MQTT accessible sur le LAN.
+Pour le Pi ou le broker infra, suivre le [guide Raspberry](raspberry.md).
+
+Les instructions détaillées à cinq terminaux ci-dessous restent disponibles
+pour observer ou diagnostiquer chaque composant séparément.
+
+## Lancement manuel
+
 Cette procédure utilise le dépôt backend/dashboard sur `feat/api-dashboard` et
 le service IA validé, qui peut se trouver dans un worktree séparé sur `feat/ai`.
 Les topics et le simulateur restent ceux de [`contracts.md`](contracts.md).
@@ -13,7 +38,8 @@ export SENTINEL_AI_REPO=/chemin/vers/le-depot-ia
 ```
 
 Si les branches sont déjà intégrées dans un seul dépôt, les deux variables
-peuvent désigner le même dossier. Les chemins indiquent les racines contenant
+doivent désigner le même dossier. C'est le cas de `feat/integration`.
+Les chemins indiquent les racines contenant
 respectivement `backend/`, `frontend/` et `ai/`.
 
 ## Installation initiale

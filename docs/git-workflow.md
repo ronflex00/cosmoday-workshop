@@ -7,6 +7,33 @@ Branches permanentes :
 - `feat/api-dashboard`
 - `feat/ai`
 - `feat/firmware`
+- `feat/integration` : version complète récupérable pour la démo locale.
+
+## Récupérer la version intégrée
+
+Nouveau clone :
+
+```bash
+git clone --branch feat/integration --single-branch https://github.com/ronflex00/cosmoday-workshop.git
+cd cosmoday-workshop
+bash scripts/setup_local.sh
+python3 scripts/local.py start
+```
+
+Dans un clone existant dont le travail est sauvegardé :
+
+```bash
+git status
+git fetch origin
+git switch --track origin/feat/integration
+```
+
+Si cette branche existe déjà localement, utiliser `git switch feat/integration`
+puis `git pull --ff-only`. Les branches de spécialité restent séparées ;
+la branche intégrée contient le backend/dashboard et l'IA sans dépendre
+de dossiers voisins. `main` n'est pas modifiée par cette publication.
+
+## Travail de l'équipe
 
 Règles :
 
