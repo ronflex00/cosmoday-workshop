@@ -10,14 +10,16 @@ Le client Paho s'abonne automatiquement à :
 - `sentinel/ai/anomaly`
 
 Les callbacks MQTT déposent leurs événements dans une file limitée à 128 entrées.
-Un consommateur asyncio valide les messages avec Pydantic et met à jour l'état
-en mémoire. Les lectures REST et les écritures utilisent la même boucle asyncio.
+Un consommateur asyncio valide les messages avec Pydantic, enregistre les données
+en base, puis met à jour l'état et diffuse le snapshot WebSocket. L'écriture d'un
+message et de son alerte automatique forme une seule transaction.
 Les messages incorrects sont ignorés avec un log ; ils ne remplacent pas le
 dernier état valide. Les payloads de plus de 16 Kio sont refusés.
 
-L'historique conserve au maximum 120 télémétries dans une `deque`. Aucun serveur
-PostgreSQL n'est nécessaire. L'état est perdu au redémarrage du backend ; une
-coupure MQTT conserve les dernières données et indique `mqtt_connected=false`.
+Le cache temps réel conserve au maximum 120 télémétries dans une `deque`.
+L'historique complet est conservé dans SQLite localement, ou PostgreSQL avec
+`DATABASE_URL`. Le backend recharge les données récentes et les alertes au
+redémarrage ; une coupure MQTT indique `mqtt_connected=false`.
 La reconnexion est automatique et renouvelle les trois abonnements.
 L'API conserve aussi les 120 derniers résultats du modèle d'anomalie pour afficher
 l'évolution de ses scores avec les séries capteurs.
@@ -59,7 +61,8 @@ racine contient des paramètres d'infrastructure et n'est pas le profil local.
 | `API_HOST` | `127.0.0.1` | Interface HTTP ; utiliser `0.0.0.0` pour un accès réseau |
 | `API_PORT` | `8000` | Port HTTP |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines HTTP(S) explicites, séparées par des virgules |
-| `API_HISTORY_LIMIT` | `120` | Nombre de points conservés, entre 1 et 120 |
+| `API_HISTORY_LIMIT` | `120` | Nombre de points du cache temps réel, entre 1 et 120 |
+| `DATABASE_URL` | `sqlite:///data/sentinel.db` | Base persistante ; chemins SQLite relatifs à `backend/`, ou URL PostgreSQL |
 
 Une origine CORS comprend le protocole, l'hôte et éventuellement le port,
 sans chemin ni slash final. Une liste vide désactive l'accès CORS.
@@ -84,12 +87,14 @@ MQTT_HOST=localhost MQTT_PORT=18883 MQTT_TLS=false \
 Cette commande utilise un seul processus, nécessaire pour l'état en mémoire.
 La documentation interactive est disponible sur `http://localhost:8000/docs`.
 L'API démarre même si le broker est momentanément indisponible.
+La base doit être accessible au démarrage. Les tables sont créées automatiquement
+si elles n'existent pas. Voir le [guide de l'historique](../docs/history.md).
 
 ## Endpoints disponibles
 
 | Méthode | Route | Réponse |
 | --- | --- | --- |
-| GET | `/health` | `{"status":"ok"}` ; disponibilité HTTP |
+| GET | `/health` | `{"status":"ok"}` ; `503` si une opération de stockage a échoué |
 | GET | `/api/v1/state` | État complet, y compris l'historique |
 | GET | `/api/v1/status` | État complet, conformément au contrat commun |
 | GET | `/api/v1/sensors/latest` | Dernière télémétrie, ou `null` |
@@ -97,6 +102,7 @@ L'API démarre même si le broker est momentanément indisponible.
 | GET | `/api/v1/alerts` | Les 50 dernières alertes au maximum, de la plus récente à la plus ancienne |
 | POST | `/api/v1/alerts` | Crée une alerte JSON ; réponse `201` avec un identifiant |
 | POST | `/api/v1/commands` | Publie une commande LED/buzzer sur MQTT |
+| GET | `/api/v1/history/{kind}` | Historique persistant paginé : `telemetry`, `vision`, `anomalies`, `alerts` |
 | WS | `/ws` | État initial puis mises à jour complètes |
 
 ```bash
@@ -107,7 +113,7 @@ curl -s http://localhost:8000/api/v1/sensors/latest | python3 -m json.tool
 curl -s http://localhost:8000/api/v1/ai/status | python3 -m json.tool
 ```
 
-L'état initial est :
+L'état initial d'une base vide est :
 
 ```json
 {
@@ -195,6 +201,8 @@ environnementale. Les échecs de connexion répétés ne dupliquent pas les aler
 système.
 
 Une `deque` conserve les 50 dernières alertes, incluses dans REST et WebSocket.
+Toutes les alertes créées sont également enregistrées en base ; leurs identifiants
+sont conservés au redémarrage. Le POST renvoie `503` si l'enregistrement échoue.
 Chaque alerte possède un `id`, un timestamp UTC, un `type`, une `severity` et
 un `message`. Elles sont publiées sans retain sur `sentinel/alerts`, avec un type
 en minuscules et sans identifiant, conformément au contrat MQTT. Cette
@@ -259,9 +267,13 @@ python -m pip check
 
 Les tests couvrent les schémas, les messages incorrects, la calibration, les
 historiques limités, la file MQTT, la configuration, les endpoints, CORS,
-les alertes sans doublons, les commandes hors ligne, les clients WebSocket
+les alertes sans doublons, la conservation en base après redémarrage, la pagination,
+les filtres temporels et par appareil, les écritures avant publication, la reprise
+après panne temporaire, les commandes hors ligne, les clients WebSocket
 multiples, leurs déconnexions et l'isolation d'un client lent ou défaillant.
-Ils utilisent un client MQTT simulé et ne nécessitent pas de broker.
+Ils utilisent un client MQTT simulé et des bases SQLite isolées ; ils ne nécessitent
+pas de broker et n'écrivent pas dans la base de la démo. L'intégration du stockage
+a aussi été vérifiée sur PostgreSQL 16, avec restauration puis lecture REST.
 
 L'intégration locale a aussi été vérifiée avec un vrai Mosquitto et Uvicorn,
 deux clients WebSocket, le simulateur et IsolationForest de la branche IA :

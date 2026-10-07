@@ -18,10 +18,20 @@ class AlertsService:
         return self._history[-1] if self._history else None
 
     def add(self, payload: AlertCreate) -> Alert:
-        alert = Alert(id=str(uuid4()), **payload.model_dump())
+        return self.record(self.make(payload))
+
+    @staticmethod
+    def make(payload: AlertCreate) -> Alert:
+        return Alert(id=str(uuid4()), **payload.model_dump())
+
+    def record(self, alert: Alert) -> Alert:
         self._history.append(alert)
         logger.info("%s: %s", alert.type, alert.message)
         return alert
 
     def recent(self) -> list[Alert]:
         return list(reversed(self._history))
+
+    def restore(self, alerts: list[Alert]) -> None:
+        self._history.clear()
+        self._history.extend(alerts)

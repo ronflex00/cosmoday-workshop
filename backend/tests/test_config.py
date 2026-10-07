@@ -2,10 +2,23 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.config import Settings
+from app.config import BACKEND_DIR, Settings
 
 
 class ConfigTests(unittest.TestCase):
+    def test_database_urls_and_password_redaction(self):
+        with patch.dict(os.environ, {}, clear=True), patch("app.config.load_dotenv"):
+            self.assertEqual(Settings.from_env().database_url, f"sqlite+aiosqlite:///{BACKEND_DIR / 'data/sentinel.db'}")
+            os.environ["DATABASE_URL"] = "postgresql://sentinel:private-password@localhost:5432/sentinel"
+            settings = Settings.from_env()
+            self.assertTrue(settings.database_url.startswith("postgresql+asyncpg://"))
+            self.assertNotIn("private-password", repr(settings))
+            os.environ["DATABASE_URL"] = "sqlite:///data/other.db"
+            self.assertEqual(Settings.from_env().database_url, f"sqlite+aiosqlite:///{BACKEND_DIR / 'data/other.db'}")
+            for value in ("bad", "mysql://user:secret@host/db", "sqlite://host/db", "postgresql://host"):
+                with self.subTest(value=value), patch.dict(os.environ, {"DATABASE_URL": value}), self.assertRaises(ValueError):
+                    Settings.from_env()
+
     def test_defaults_overrides_and_invalid_config(self):
         with patch.dict(os.environ, {}, clear=True), patch("app.config.load_dotenv"):
             settings = Settings.from_env()

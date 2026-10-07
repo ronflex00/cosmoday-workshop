@@ -181,8 +181,10 @@ Pour une page HTTPS, configurer aussi une API HTTPS et un WebSocket `wss://`.
    sur le matériel.
 6. Couper puis relancer API et broker pour vérifier les deux reconnexions.
 
-Conserver **un seul processus API** tant que l'état est en mémoire. PostgreSQL
-n'est pas requis pour cette V1. Les détections IA génèrent des alertes ; elles
+Conserver **un seul processus API**, propriétaire du cache et des transitions
+d'alertes. L'historique persistant utilise SQLite localement ; PostgreSQL est
+configurable avec `DATABASE_URL`, selon le [guide de stockage](history.md).
+Les détections IA génèrent des alertes ; elles
 n'activent pas automatiquement le buzzer. La commande doit être explicitement
 envoyée et sa confirmation ne constitue pas un retour d'état de l'ESP8266.
 

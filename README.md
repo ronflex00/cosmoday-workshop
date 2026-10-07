@@ -80,10 +80,11 @@ DHT22 / MQ-2 / PIR
        │ MQTT / MQTTS
        ▼
  Mosquitto (Raspberry Pi 5)
-   ├──────────────► Backend FastAPI (état en mémoire)
+   ├──────────────► Backend FastAPI (cache temps réel)
    │                    │
    │                    ├── WebSocket/REST ───► React Dashboard
-   │                    └── MQTT commands ───► LED/Buzzer via ESP8266
+   │                    ├── MQTT commands ───► LED/Buzzer via ESP8266
+   │                    └── Historique ──────► SQLite / PostgreSQL
    │
    └──────────────► AI Python (host Pi)
                         ├── Webcam USB → détection personne
@@ -95,7 +96,7 @@ DHT22 / MQ-2 / PIR
 ## Répartition recommandée
 
 - `feat/infra` : Raspberry Pi 5, Docker, Mosquitto, réseau, MQTTS/TLS, UFW, SSH, PostgreSQL.
-- `feat/api-dashboard` : FastAPI, WebSocket/REST, React dashboard ; persistance future.
+- `feat/api-dashboard` : FastAPI, WebSocket/REST, React dashboard et historique en base.
 - `feat/ai` : webcam, OpenCV/YOLO, IsolationForest, publication MQTT des résultats IA.
 - `feat/firmware` : ESP8266, capteurs, OLED, LED, buzzer, MQTT.
 
@@ -112,8 +113,9 @@ DHT22 / MQ-2 / PIR
 ## Backend et dashboard disponibles
 
 La V1 fonctionne sur un PC Linux avec Mosquitto local, sans Raspberry ni
-PostgreSQL. FastAPI reçoit la télémétrie et les résultats des deux IA, conserve
-120 mesures et 50 alertes au maximum, puis transmet son état au dashboard.
+PostgreSQL. FastAPI reçoit la télémétrie et les résultats des deux IA, les enregistre
+en base et transmet son état au dashboard. Le cache contient jusqu'à 120 mesures
+et 50 alertes ; l'historique complet est consultable par l'API.
 React charge d'abord REST, puis suit les mises à jour WebSocket avec reconnexion.
 Les commandes LED/buzzer passent par REST puis MQTT.
 
@@ -165,6 +167,7 @@ tourner sur le même port que le backend.
 - [Démo locale : cinq terminaux et diagnostic](docs/local-demo.md).
 - [Intégration Raspberry Pi et accès depuis un autre PC](docs/raspberry.md).
 - [Configuration et endpoints du backend](backend/README.md).
+- [Base de données et API des historiques](docs/history.md).
 - [Configuration et composants du frontend](frontend/README.md).
 - [Scénario de présentation](docs/demo-plan.md).
 
@@ -179,7 +182,7 @@ python3 -m unittest discover -s tests -v
 (cd frontend && npm run build)
 ```
 
-Cela couvre les 22 tests IA, les 32 tests backend, les deux tests de propriété
+Cela couvre les 22 tests IA, les 46 tests backend, les deux tests de propriété
 des processus du lanceur et le build TypeScript/React. Les tests IA importent
 la vision ; ils nécessitent donc l'installation complète, même sans webcam
 branchée. L'installation `--no-camera` suffit pour les tests backend et lanceur.
@@ -199,9 +202,9 @@ ces messages dans `.runtime/events.log` avec le profil local par défaut.
 Le build produit `frontend/dist/`. Les tests unitaires ne nécessitent pas de
 broker ; le guide de démo couvre le flux MQTT → IA → API → React et les commandes.
 
-L'état, la calibration IA et les historiques sont en mémoire. Un redémarrage
-du backend efface son état ; un redémarrage de l'IA relance sa calibration.
-Les publications suivantes remplissent à nouveau le dashboard. La confirmation
+La télémétrie, les résultats des IA et les alertes sont conservés en base. Le
+backend recharge ses données récentes au redémarrage. La calibration du modèle
+IA reste en mémoire : redémarrer l'IA relance son apprentissage. La confirmation
 d'une commande atteste l'envoi MQTT, sans accusé de réception de l'ESP8266.
 
 ## Configuration partagée
@@ -217,8 +220,9 @@ au build. Le navigateur utilise l'API pour l'état et les commandes, et le
 service IA pour le flux caméra et ses métriques.
 
 `docker-compose.yml` fournit les services d'infrastructure ; l'API et le frontend
-se lancent actuellement sur l'hôte. PostgreSQL, TLS et le déploiement permanent
-restent à intégrer avec l'équipe infra. La webcam appartient au service IA.
+se lancent actuellement sur l'hôte. PostgreSQL est configurable avec `DATABASE_URL` ;
+la démo locale utilise SQLite. TLS et le déploiement permanent restent à intégrer
+avec l'équipe infra. La webcam appartient au service IA.
 
 ## Travail dans cette branche
 

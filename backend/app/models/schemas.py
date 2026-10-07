@@ -135,3 +135,20 @@ class SentinelState(PayloadModel):
     history: list[SensorTelemetry] = Field(default_factory=list)
     anomaly_history: list[AnomalyResult] = Field(default_factory=list)
     alerts: list[Alert] = Field(default_factory=list)
+
+
+HistoryKind = Literal["telemetry", "vision", "anomalies", "alerts"]
+
+
+class HistoryEntry(PayloadModel):
+    id: int
+    ts: datetime
+    received_at: datetime
+    topic: str
+    data: SensorTelemetry | VisionResult | AnomalyResult | Alert
+
+
+class HistoryPage(PayloadModel):
+    items: list[HistoryEntry]
+    limit: int
+    next_before_id: int | None = None

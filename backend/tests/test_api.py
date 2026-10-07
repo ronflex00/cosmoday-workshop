@@ -39,7 +39,7 @@ class FakeMQTT:
 
 class APITests(unittest.TestCase):
     def test_health_and_empty_state(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             self.assertEqual(client.get("/health").json(), {"status": "ok"})
             state = client.get("/api/v1/state").json()
@@ -51,7 +51,7 @@ class APITests(unittest.TestCase):
         self.assertTrue(app.state.mqtt.stopped)
 
     def test_queue_to_rest_state_and_ai_status(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             for topic, payload in ((TELEMETRY_TOPIC, telemetry()), (VISION_TOPIC, vision()),
                                    (ANOMALY_TOPIC, anomaly(ready=False, anomaly=False, score=None))):
@@ -72,7 +72,7 @@ class APITests(unittest.TestCase):
             self.assertEqual(client.get("/api/v1/ai/status").json()["vision"], state["vision"])
 
     def test_cors_allows_only_configured_origin(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             allowed = client.get("/health", headers={"Origin": "http://localhost:5173"})
             denied = client.get("/health", headers={"Origin": "http://untrusted.test"})
@@ -80,7 +80,7 @@ class APITests(unittest.TestCase):
             self.assertNotIn("access-control-allow-origin", denied.headers)
 
     def test_alert_post_get_and_invalid_input(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             payload = {"ts": "2026-10-05T14:30:00Z", "type": "intrusion",
                        "severity": "critical", "message": "Human presence detected"}
@@ -97,7 +97,7 @@ class APITests(unittest.TestCase):
             self.assertEqual(client.get("/api/v1/alerts").json(), before)
 
     def test_command_structure_validation_and_offline_response(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             for command in ({"buzzer": True, "led": "red"}, {"buzzer": False, "led": "green"}):
                 response = client.post("/api/v1/commands", json=command)
@@ -115,7 +115,7 @@ class APITests(unittest.TestCase):
             self.assertEqual(len(app.state.mqtt.commands), 2)
 
     def test_cors_post_preflight(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             response = client.options("/api/v1/commands", headers={
                 "Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST",

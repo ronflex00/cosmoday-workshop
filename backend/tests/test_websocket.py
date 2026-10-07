@@ -28,7 +28,7 @@ def wait_connected(client):
 
 class WebSocketTests(unittest.TestCase):
     def test_initial_state_multiple_clients_and_disconnect(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             wait_connected(client)
             initial = client.get("/api/v1/state").json()
@@ -53,7 +53,7 @@ class WebSocketTests(unittest.TestCase):
                     self.assertEqual(reconnected.receive_json()["data"], update)
 
     def test_alert_post_broadcasts_updated_history(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             wait_connected(client)
             with client.websocket_connect("/ws") as websocket:
@@ -67,7 +67,7 @@ class WebSocketTests(unittest.TestCase):
                 self.assertEqual(client.get("/api/v1/state").json(), state)
 
     def test_unconfigured_browser_origin_is_rejected(self):
-        app = create_app(Settings())
+        app = create_app(Settings(database_url="sqlite+aiosqlite:///:memory:"))
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
             with self.assertRaises(WebSocketDisconnect) as error:
                 with client.websocket_connect("/ws", headers={"Origin": "http://untrusted.test"}):

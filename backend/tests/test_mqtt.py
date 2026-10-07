@@ -3,6 +3,7 @@ import unittest
 from queue import Queue
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import UUID
 
 from app.config import Settings
 from app.models.schemas import INPUT_TOPICS, TELEMETRY_TOPIC, Command
@@ -10,6 +11,17 @@ from app.mqtt.client import MQTTClient, MQTTEvent
 
 
 class MQTTTests(unittest.TestCase):
+    def test_received_messages_have_distinct_ids_and_utc_reception_timestamps(self):
+        events = Queue(maxsize=2)
+        client = MQTTClient(Settings(), events)
+        message = SimpleNamespace(topic=TELEMETRY_TOPIC, payload=b"same payload")
+        for _ in range(2):
+            client._on_message(None, None, message)
+        first, second = events.get_nowait(), events.get_nowait()
+        self.assertNotEqual(UUID(first.id), UUID(second.id))
+        self.assertEqual(first.received_at.utcoffset().total_seconds(), 0)
+        self.assertLessEqual(first.received_at, second.received_at)
+
     def test_reconnection_subscribes_to_all_topics(self):
         events = Queue(maxsize=8)
         client = MQTTClient(Settings(), events)
@@ -28,14 +40,16 @@ class MQTTTests(unittest.TestCase):
         client = MQTTClient(Settings(), events)
         message = SimpleNamespace(topic=TELEMETRY_TOPIC, payload=b"invalid JSON")
         client._on_message(None, None, message)
-        self.assertEqual(events.get_nowait(), MQTTEvent(TELEMETRY_TOPIC, b"invalid JSON"))
+        event = events.get_nowait()
+        self.assertEqual((event.topic, event.payload), (TELEMETRY_TOPIC, b"invalid JSON"))
 
     def test_connection_status_survives_a_full_queue(self):
         events = Queue(maxsize=1)
         events.put(MQTTEvent(TELEMETRY_TOPIC, b"data"))
         client = MQTTClient(Settings(), events)
         client._enqueue(MQTTEvent(None, False))
-        self.assertEqual(events.get_nowait(), MQTTEvent(None, False))
+        event = events.get_nowait()
+        self.assertEqual((event.topic, event.payload), (None, False))
 
     def test_command_is_published_without_retain_and_waits_for_delivery(self):
         client = MQTTClient(Settings(), Queue())

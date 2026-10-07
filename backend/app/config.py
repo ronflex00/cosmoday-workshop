@@ -6,6 +6,34 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+
+def database_url(value: str) -> str:
+    """Normalize drivers and resolve SQLite files relative to backend/."""
+    try:
+        url = make_url(value.strip())
+    except (ArgumentError, ValueError):
+        raise ValueError("DATABASE_URL must be a PostgreSQL or SQLite URL") from None
+    if url.drivername in {"postgres", "postgresql", "postgresql+asyncpg"}:
+        if not url.database or not url.host:
+            raise ValueError("DATABASE_URL must specify a PostgreSQL host and database")
+        url = url.set(drivername="postgresql+asyncpg")
+    elif url.drivername in {"sqlite", "sqlite+aiosqlite"}:
+        if url.host or url.username or url.password:
+            raise ValueError("SQLite DATABASE_URL must identify a local file or :memory:")
+        path = ":memory:" if url.database in {None, "", ":memory:"} else str((BACKEND_DIR / url.database).resolve())
+        url = url.set(drivername="sqlite+aiosqlite", database=path)
+    else:
+        raise ValueError("DATABASE_URL must use PostgreSQL/asyncpg or SQLite/aiosqlite")
+    return url.render_as_string(hide_password=False)
+
+
+def default_database_url() -> str:
+    return database_url("sqlite:///data/sentinel.db")
 
 
 def _port(name: str, default: int) -> int:
@@ -39,6 +67,7 @@ class Settings:
     api_port: int = 8000
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     history_limit: int = 120
+    database_url: str = field(default_factory=default_database_url, repr=False)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -76,4 +105,5 @@ class Settings:
                    mqtt_tls_ca=os.environ.get("MQTT_TLS_CA") or None,
                    mqtt_tls_cert=cert, mqtt_tls_key=key,
                    api_host=api_host, api_port=_port("API_PORT", 8000),
-                   cors_origins=origins, history_limit=history_limit)
+                   cors_origins=origins, history_limit=history_limit,
+                   database_url=database_url(os.environ.get("DATABASE_URL", default_database_url())))
