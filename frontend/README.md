@@ -1,5 +1,9 @@
 # Frontend Sentinel-X
 
+Pour héberger le dashboard avec Docker sur le Raspberry Pi, suivre le
+[guide frontend Pi](../docs/frontend-pi.md). Le serveur Nginx relaie REST et
+WebSocket vers FastAPI ; le navigateur utilise une seule adresse via SSH.
+
 Dashboard React + Vite + TypeScript, avec Tailwind CSS, Recharts et Lucide React.
 Les mesures, résultats IA et alertes suivent la chaîne
 MQTT → FastAPI → REST/WebSocket → React.

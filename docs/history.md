@@ -35,6 +35,11 @@ IsolationForest appartient au service IA et reste en mémoire.
 
 ## PostgreSQL
 
+Le Pi stocke maintenant les nouvelles mesures sous forme de
+[tendances par minute](telemetry-trends.md). Le direct conserve chaque mesure.
+L'historique brut antérieur reste consultable ; `telemetry_trends` expose les
+moyennes, minimums, maximums et statistiques de présence.
+
 Le même backend utilise PostgreSQL si cette URL est configurée :
 
 ```dotenv

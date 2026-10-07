@@ -10,6 +10,25 @@ export interface SensorTelemetry extends SensorFeatures {
   motion: boolean;
 }
 
+export interface TelemetryTrend extends SensorTelemetry {
+  aggregation: 'minute';
+  sample_count: number;
+  minimum: SensorFeatures;
+  maximum: SensorFeatures;
+  motion_count: number;
+  motion_transitions: number;
+  last_motion: boolean;
+}
+
+export function isTelemetryTrend(value: unknown): value is TelemetryTrend {
+  return isTelemetry(value) && isRecord(value) && value.aggregation === 'minute'
+    && Number.isInteger(value.sample_count) && Number(value.sample_count) > 0
+    && isFeatures(value.minimum) && isFeatures(value.maximum)
+    && Number.isInteger(value.motion_count) && Number(value.motion_count) >= 0
+    && Number.isInteger(value.motion_transitions) && Number(value.motion_transitions) >= 0
+    && typeof value.last_motion === 'boolean';
+}
+
 export interface VisionResult {
   ts: string;
   person_detected: boolean;
