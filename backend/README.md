@@ -19,6 +19,8 @@ L'historique conserve au maximum 120 télémétries dans une `deque`. Aucun serv
 PostgreSQL n'est nécessaire. L'état est perdu au redémarrage du backend ; une
 coupure MQTT conserve les dernières données et indique `mqtt_connected=false`.
 La reconnexion est automatique et renouvelle les trois abonnements.
+L'API conserve aussi les 120 derniers résultats du modèle d'anomalie pour afficher
+l'évolution de ses scores avec les séries capteurs.
 
 Un gestionnaire WebSocket transmet des snapshots complets aux dashboards. Chaque
 connexion possède une file d'un seul snapshot en attente : une mise à jour plus

@@ -66,6 +66,7 @@ class APITests(unittest.TestCase):
             self.assertEqual(state["vision"]["confidence"], 0.95)
             self.assertIsNone(state["anomaly"]["score"])
             self.assertFalse(state["anomaly"]["ready"])
+            self.assertEqual(len(state["anomaly_history"]), 1)
             self.assertEqual(client.get("/api/v1/status").json(), state)
             self.assertEqual(client.get("/api/v1/sensors/latest").json(), state["telemetry"])
             self.assertEqual(client.get("/api/v1/ai/status").json()["vision"], state["vision"])

@@ -18,7 +18,24 @@ class StateTests(unittest.TestCase):
         self.assertEqual(state["vision"]["confidence"], 0.95)
         self.assertIsNone(state["anomaly"]["score"])
         self.assertEqual(len(state["history"]), 1)
+        self.assertEqual(len(state["anomaly_history"]), 1)
         self.assertIsNotNone(state["system"]["last_update"])
+
+    def test_anomaly_history_is_bounded_and_snapshotted(self):
+        store = StateService(history_limit=3)
+        for value in range(5):
+            store.apply_message(ANOMALY_TOPIC, json.dumps(anomaly(
+                ts=f"2026-10-05T14:30:{value:02d}Z",
+                score=-0.1 * value,
+                anomaly=value >= 3,
+            )).encode())
+        snapshot = store.snapshot()
+        self.assertEqual(
+            [round(result.score, 1) for result in snapshot.anomaly_history],
+            [-0.2, -0.3, -0.4],
+        )
+        snapshot.anomaly_history.clear()
+        self.assertEqual(len(store.anomaly_history), 3)
 
     def test_bad_payload_does_not_replace_valid_state(self):
         store = StateService()

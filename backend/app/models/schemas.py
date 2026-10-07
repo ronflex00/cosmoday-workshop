@@ -133,4 +133,5 @@ class SentinelState(PayloadModel):
     anomaly: AnomalyResult | None = None
     system: SystemStatus = Field(default_factory=SystemStatus)
     history: list[SensorTelemetry] = Field(default_factory=list)
+    anomaly_history: list[AnomalyResult] = Field(default_factory=list)
     alerts: list[Alert] = Field(default_factory=list)

@@ -2,13 +2,11 @@ import { Activity, Droplets, Radio, Thermometer, Wind } from 'lucide-react';
 import { lazy, Suspense } from 'react';
 
 import AlertsPanel from './components/AlertsPanel';
-import AnomalyPanel from './components/AnomalyPanel';
 import CommandPanel from './components/CommandPanel';
 import Header from './components/Header';
 import SensorCard from './components/SensorCard';
 import StatusBadge from './components/StatusBadge';
 import SystemStatus from './components/SystemStatus';
-import VisionDashboard from './components/VisionDashboard';
 import { useNow } from './hooks/useNow';
 import { useSentinelSocket } from './hooks/useSentinelSocket';
 import { formatNumber, formatTime } from './utils/format';
@@ -16,11 +14,22 @@ import { isFresh } from './utils/status';
 import type { Tone } from './utils/status';
 
 const SensorChart = lazy(() => import('./components/SensorChart'));
+const EnvironmentDashboard = lazy(() => import('./components/EnvironmentDashboard'));
+const VisionDashboard = lazy(() => import('./components/VisionDashboard'));
 
 export default function App() {
-  return window.location.pathname.replace(/\/+$/, '') === '/vision'
-    ? <VisionDashboard />
-    : <OverviewDashboard />;
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  if (pathname === '/vision') {
+    return <Suspense fallback={<section className="panel chart-loading">Loading AI Vision dashboard…</section>}>
+      <VisionDashboard />
+    </Suspense>;
+  }
+  if (pathname === '/environment') {
+    return <Suspense fallback={<section className="panel chart-loading">Loading AI Environment dashboard…</section>}>
+      <EnvironmentDashboard />
+    </Suspense>;
+  }
+  return <OverviewDashboard />;
 }
 
 function OverviewDashboard() {
@@ -66,10 +75,6 @@ function OverviewDashboard() {
             <SensorCard title="Motion" value={!telemetry ? 'UNKNOWN' : telemetry.motion ? 'YES' : 'NO'} icon={Radio} detail={telemetryFresh ? telemetry?.motion ? 'Motion detected' : 'No movement detected' : readingDetail} live={telemetryFresh} motion={!!telemetry?.motion} id="motion-value" />
           </div>
         </section>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" id="ai">
-          <AnomalyPanel anomaly={state?.anomaly ?? null} fresh={anomalyFresh} online={online} />
-        </div>
 
         <Suspense fallback={<section className="panel chart-loading" aria-label="Environmental trends">Loading environmental trends…</section>}>
           <SensorChart history={state?.history ?? []} live={telemetryFresh} />

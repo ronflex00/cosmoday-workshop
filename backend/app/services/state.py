@@ -24,6 +24,7 @@ class StateService:
         self.anomaly = None
         self.system = SystemStatus()
         self.history = deque(maxlen=history_limit)
+        self.anomaly_history = deque(maxlen=history_limit)
         self.alerts = AlertsService()
 
     def set_mqtt_connected(self, connected: bool) -> bool:
@@ -70,6 +71,7 @@ class StateService:
                 self.alerts.add(AlertCreate(ts=message.ts, type="ENVIRONMENTAL_ANOMALY",
                                            severity="warning", message="Environmental anomaly detected"))
             self.anomaly = message
+            self.anomaly_history.append(message)
         self.system = SystemStatus(mqtt_connected=self.system.mqtt_connected,
                                    last_update=datetime.now(timezone.utc))
         return True
@@ -77,4 +79,6 @@ class StateService:
     def snapshot(self) -> SentinelState:
         return SentinelState(telemetry=self.telemetry, vision=self.vision,
                              anomaly=self.anomaly, system=self.system,
-                             history=list(self.history), alerts=self.alerts.recent())
+                             history=list(self.history),
+                             anomaly_history=list(self.anomaly_history),
+                             alerts=self.alerts.recent())

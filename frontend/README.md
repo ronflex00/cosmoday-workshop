@@ -62,6 +62,12 @@ Les horloges du PC et des appareils doivent être synchronisées.
 - **AI Vision** (`/vision`) : flux USB annoté par YOLO, détection, confiance,
   FPS d'inférence, latence mesurée, modèle et changements d'état détectés pendant
   la session. Aucun chiffre n'est simulé ; les métriques absentes affichent `—`.
+- **AI Environment** (`/environment`) : score brut et classification Isolation
+  Forest, historique borné des scores réellement reçus, alertes d'anomalie et
+  séries temporelles de température, humidité et gaz. Les flèches résument la
+  direction des six derniers points ; elles ne constituent pas des seuils ou une
+  décision IA. Le modèle actuel classe chaque échantillon capteur indépendamment,
+  et ne prédit pas des incidents futurs.
 - **AI Environment** : CALIBRATING lorsque `ready=false`, NORMAL lorsque
   `ready=true/anomaly=false`, ANOMALY lorsque `ready=true/anomaly=true`. Le score
   reste `—` pendant la calibration, puis s'affiche avec trois décimales.

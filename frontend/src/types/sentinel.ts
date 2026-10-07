@@ -40,6 +40,7 @@ export interface SentinelState {
   anomaly: AnomalyResult | null;
   system: { mqtt_connected: boolean; last_update: string | null };
   history: SensorTelemetry[];
+  anomaly_history?: AnomalyResult[];
   alerts: Alert[];
 }
 
@@ -110,6 +111,8 @@ export function isSentinelState(value: unknown): value is SentinelState {
     && isRecord(value.system) && typeof value.system.mqtt_connected === 'boolean'
     && (value.system.last_update === null || isTimestamp(value.system.last_update))
     && Array.isArray(value.history) && value.history.every(isTelemetry)
+    && (value.anomaly_history === undefined
+      || (Array.isArray(value.anomaly_history) && value.anomaly_history.every(isAnomaly)))
     && Array.isArray(value.alerts) && value.alerts.every(isAlert);
 }
 
