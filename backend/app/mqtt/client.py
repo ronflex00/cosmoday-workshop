@@ -2,8 +2,10 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from queue import Empty, Full, Queue
+from uuid import uuid4
 
 import paho.mqtt.client as mqtt
 
@@ -17,6 +19,8 @@ logger = logging.getLogger("MQTT")
 class MQTTEvent:
     topic: str | None
     payload: bytes | bool
+    id: str = field(default_factory=lambda: str(uuid4()))
+    received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class MQTTClient:
