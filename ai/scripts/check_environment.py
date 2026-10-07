@@ -1,4 +1,4 @@
-"""Diagnose Python dependencies and USB capture; never install or download models."""
+"""BDE Diagnose Python dependencies and USB capture; never install or download models."""
 
 import argparse
 import importlib
