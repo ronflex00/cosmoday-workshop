@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+from contextlib import closing
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -18,9 +19,10 @@ def snapshot(source: Path) -> Path:
         raise ValueError("SQLite source does not exist; no migration performed")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     backup = source.with_name(f"sentinel-backup-{stamp}.db")
-    with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as reader:
-        with sqlite3.connect(backup) as writer:
-            reader.backup(writer)
+    with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as reader:
+        with closing(sqlite3.connect(backup)) as writer:
+            with writer:
+                reader.backup(writer)
     return backup
 
 
@@ -33,7 +35,7 @@ async def import_history(backup: Path, connection) -> int:
         if await connection.scalar(select(func.count()).select_from(events)):
             raise ValueError("Destination history is not empty; import refused")
     count = 0
-    with sqlite3.connect(backup.resolve().as_uri() + "?mode=ro", uri=True) as reader:
+    with closing(sqlite3.connect(backup.resolve().as_uri() + "?mode=ro", uri=True)) as reader:
         reader.row_factory = sqlite3.Row
         cursor = reader.execute("SELECT * FROM sentinel_history ORDER BY id")
         while batch := cursor.fetchmany(250):

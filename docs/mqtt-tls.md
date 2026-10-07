@@ -75,9 +75,9 @@ un problème de permission avec `chmod 777`.
 
 ## Démarrage du broker seul
 
-Depuis la racine du dépôt, préparer également le `.env` racine ignoré par Git,
-car le service PostgreSQL du Compose le référence. Remplacer ses valeurs
-`CHANGE_ME` avant de démarrer la DB.
+Le broker seul ne nécessite pas de secret PostgreSQL. Pour déployer la DB et
+l'API ensuite, suivre le [guide PostgreSQL](postgresql-pi.md) : le Compose actuel
+utilise un fichier de mot de passe privé, avec les noms DB/utilisateur du `.env`.
 
 ```bash
 sudo docker compose config --quiet

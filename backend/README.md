@@ -25,8 +25,8 @@ redémarrage ; une coupure MQTT indique `mqtt_connected=false`.
 La reconnexion est automatique et renouvelle les abonnements.
 L'état de présence de l'ESP est exposé dans `state.device` et renouvelé par le
 statut retenu du broker. Les alertes MQTT sont persistées sans être republiées.
-Le déploiement Docker sur le Pi utilise SQLite dans le volume `api_data` ;
-voir le [guide MQTT → API → dashboard](../docs/api-mqtt-dashboard.md).
+Le déploiement Docker sur le Pi utilise PostgreSQL dans le volume `postgres_data` ;
+voir le [guide de migration et déploiement](../docs/postgresql-pi.md).
 L'API conserve aussi les 120 derniers résultats du modèle d'anomalie pour afficher
 l'évolution de ses scores avec les séries capteurs.
 
@@ -70,6 +70,7 @@ racine contient des paramètres d'infrastructure et n'est pas le profil local.
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines HTTP(S) explicites, séparées par des virgules |
 | `API_HISTORY_LIMIT` | `120` | Nombre de points du cache temps réel, entre 1 et 120 |
 | `DATABASE_URL` | `sqlite:///data/sentinel.db` | Base persistante ; chemins SQLite relatifs à `backend/`, ou URL PostgreSQL |
+| `DATABASE_PASSWORD_FILE` | vide | Alternative à `DATABASE_URL` : secret PostgreSQL avec `DATABASE_HOST` (db), `DATABASE_PORT` (5432), `POSTGRES_USER` et `POSTGRES_DB` (sentinel) |
 
 Une origine CORS comprend le protocole, l'hôte et éventuellement le port,
 sans chemin ni slash final. Une liste vide désactive l'accès CORS.

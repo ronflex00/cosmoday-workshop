@@ -25,15 +25,12 @@ ne fournit pas d'identifiant d'événement.
 
 ## Persistance utilisée pour cette étape
 
-Le backend existant supporte PostgreSQL et SQLite via `DATABASE_URL`.
-Le service Compose `api` utilise explicitement SQLite dans
-`/app/data/sentinel.db`, conservé dans le volume `api_data`. Les mesures et
-alertes persistent au redémarrage du conteneur. Le statut ESP reste un état
-courant, reçu du broker (retained/Last Will), sans historique DB dans cette étape.
-
-PostgreSQL reste la cible finale du projet ; il n'est pas démarré par
-`docker compose up -d api`. Son déploiement et sa migration seront traités
-séparément. Ne pas utiliser `docker compose down -v` : cela effacerait les volumes.
+Le Compose actuel utilise PostgreSQL sur le Pi, dans le volume `postgres_data`.
+L'installation initiale utilisait SQLite dans `api_data` ; avant de déployer
+ce Compose sur cette installation, suivre le [guide de migration PostgreSQL](postgresql-pi.md).
+Il prépare le secret DB et conserve l'historique existant. `up -d api` démarre
+aussi la base et attend sa santé. Le statut ESP reste un état courant MQTT.
+Ne pas utiliser `docker compose down -v` : cela effacerait les volumes.
 
 ## Accès administrateur
 
@@ -69,7 +66,8 @@ tar -xzf api-deploy.tar.gz
 ```
 
 Les fichiers broker existants et ses secrets ne sont pas dans ce paquet.
-Le `.env` racine déjà utilisé par Compose reste requis par le service DB.
+Le `.env` racine peut définir `POSTGRES_USER` et `POSTGRES_DB` ; le mot de passe
+DB vient maintenant du fichier privé décrit dans le guide PostgreSQL.
 
 ## Préparer le secret API (Pi)
 
@@ -104,6 +102,10 @@ La CA publique est également montée seule ; `MQTT_HOST=mqtt` correspond au
 SAN `DNS:mqtt` du certificat créé pendant les tests.
 
 ## Démarrer et vérifier l'API (Pi)
+
+Avec le Compose actuel, terminer d'abord la préparation DB et la migration
+du [guide PostgreSQL](postgresql-pi.md). Les commandes ci-dessous supposent
+ces étapes réussies.
 
 ```bash
 sudo docker compose --profile api config --quiet
@@ -164,5 +166,7 @@ du Compose. REST fournit l'état initial ; WebSocket fournit ensuite les mises
    WebSocket reconnecté. Observer les nouveaux points après redémarrage.
 
 Ne déclarer ces étapes validées qu'après les sorties réelles du Pi et les
-observations du navigateur. Les tests automatisés utilisent MQTT simulé et
-SQLite ; la construction ARM64 de l'image reste à confirmer sur le Pi.
+observations du navigateur. Les tests automatisés utilisent MQTT simulé et SQLite.
+La construction ARM64 de l'API et la réception réelle ont été confirmées sur le Pi.
+Les alertes et la persistance SQLite après redémarrage ont été confirmées par
+l'utilisateur. La bascule PostgreSQL reste à valider sur le Pi.

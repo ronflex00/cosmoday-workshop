@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -21,8 +23,8 @@ class MigrationTests(unittest.IsolatedAsyncioTestCase):
             old = HistoryStore(f"sqlite:///{source.as_posix()}")
             await old.initialize()
             row = dict(id=42, event_id="event-42", kind="telemetry", topic="sentinel/telemetry",
-                       ts=__import__('datetime').datetime(2026, 10, 7),
-                       received_at=__import__('datetime').datetime(2026, 10, 7),
+                       ts=datetime(2026, 10, 7),
+                       received_at=datetime(2026, 10, 7),
                        device_id="sentinel-01", device_key="abc", data={"motion": True})
             async with old.engine.begin() as connection:
                 await connection.execute(events.insert(), row)
@@ -47,9 +49,11 @@ class MigrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_import_rolls_back(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "broken.db"
-            with sqlite3.connect(source) as connection:
-                connection.execute("CREATE TABLE sentinel_history (id INTEGER, data TEXT, ts TEXT, received_at TEXT)")
-                connection.execute("INSERT INTO sentinel_history VALUES (1, ?, 'invalid', 'invalid')", (json.dumps({}),))
+            with closing(sqlite3.connect(source)) as connection, connection:
+                connection.execute("CREATE TABLE sentinel_history (id INTEGER, event_id TEXT, kind TEXT, topic TEXT, data TEXT, ts TEXT, received_at TEXT)")
+                connection.executemany("INSERT INTO sentinel_history VALUES (?, ?, 'telemetry', 'sentinel/telemetry', ?, ?, ?)",
+                                       [(i, f"event-{i}", json.dumps({}), "2026-10-07", "2026-10-07") for i in range(1, 251)])
+                connection.execute("INSERT INTO sentinel_history VALUES (251, 'broken', 'telemetry', 'sentinel/telemetry', ?, 'invalid', 'invalid')", (json.dumps({}),))
             target = HistoryStore("sqlite:///:memory:")
             try:
                 await target.initialize()

@@ -41,17 +41,12 @@ Le même backend utilise PostgreSQL si cette URL est configurée :
 DATABASE_URL=postgresql://sentinel:CHANGE_ME@127.0.0.1:5432/sentinel
 ```
 
-Remplacer les identifiants par ceux de la base. Avec le service `db` du Compose,
-renseigner les valeurs `POSTGRES_*` dans le `.env` racine puis lancer uniquement
-la base depuis la racine du projet :
-
-```bash
-docker compose up -d db
-```
-
-L'API sur l'hôte utilise `127.0.0.1:5432`. Une API conteneurisée sur le même
-réseau Compose utiliserait `db:5432`. Choisir une autre URL ne transfère pas les
-données d'une base vers l'autre. Les tables absentes sont créées sans supprimer
+Cet exemple d'URL concerne une base accessible localement. Le Compose du Pi
+ne publie pas 5432 : l'API conteneurisée utilise `db:5432` avec un mot de passe
+lu depuis un fichier privé. Suivre le [guide PostgreSQL sur le Pi](postgresql-pi.md)
+pour le déploiement et le transfert de l'historique SQLite.
+Choisir une autre URL ne transfère pas les données d'une base vers l'autre.
+Les tables absentes sont créées sans supprimer
 les données existantes ; les évolutions futures du schéma demanderont une migration.
 
 L'accès asynchrone utilise [SQLAlchemy](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
