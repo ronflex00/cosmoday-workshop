@@ -102,6 +102,7 @@ class Settings:
     api_port: int = 8000
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     history_limit: int = 120
+    telemetry_storage: str = "raw"
     database_url: str = field(default_factory=default_database_url, repr=False)
 
     @classmethod
@@ -135,10 +136,13 @@ class Settings:
             raise ValueError("API_HISTORY_LIMIT must be an integer") from exc
         if not 1 <= history_limit <= 120:
             raise ValueError("API_HISTORY_LIMIT must be between 1 and 120")
+        telemetry_storage = os.environ.get("TELEMETRY_STORAGE", "raw")
+        if telemetry_storage not in {"raw", "trends"}:
+            raise ValueError("TELEMETRY_STORAGE must be raw or trends")
         return cls(mqtt_host=host, mqtt_port=_port("MQTT_PORT", 8883 if tls else 1883),
                    mqtt_username=username, mqtt_password=password, mqtt_tls=tls,
                    mqtt_tls_ca=os.environ.get("MQTT_TLS_CA") or None,
                    mqtt_tls_cert=cert, mqtt_tls_key=key,
-                   api_host=api_host, api_port=_port("API_PORT", 8000),
+                   api_host=api_host, api_port=_port("API_PORT", 8000), telemetry_storage=telemetry_storage,
                    cors_origins=origins, history_limit=history_limit,
                    database_url=configured_database_url())

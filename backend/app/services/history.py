@@ -15,8 +15,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ..config import database_url
 from ..models.schemas import (ALERTS_TOPIC, ANOMALY_TOPIC, TELEMETRY_TOPIC, VISION_TOPIC,
                               Alert, AnomalyResult, HistoryEntry, HistoryKind, HistoryPage,
-                              SensorTelemetry, VisionResult)
+                              SensorTelemetry, TelemetryTrend, VisionResult)
 from .state import StateChange, StateService
+from .trends import Minute
 
 metadata = MetaData()
 events = Table(
@@ -37,7 +38,7 @@ events = Table(
 )
 KINDS = {TELEMETRY_TOPIC: "telemetry", VISION_TOPIC: "vision", ANOMALY_TOPIC: "anomalies"}
 SCHEMAS = {"telemetry": SensorTelemetry, "vision": VisionResult,
-           "anomalies": AnomalyResult, "alerts": Alert}
+           "anomalies": AnomalyResult, "alerts": Alert, "telemetry_trends": TelemetryTrend}
 
 
 def utc(value: datetime) -> datetime:
@@ -45,7 +46,7 @@ def utc(value: datetime) -> datetime:
 
 
 class HistoryStore:
-    def __init__(self, url: str):
+    def __init__(self, url: str, *, trends_only: bool = False):
         url = database_url(url)
         parsed = make_url(url)
         if parsed.drivername == "sqlite+aiosqlite" and parsed.database != ":memory:":
@@ -55,6 +56,8 @@ class HistoryStore:
         self.available = False
         # Protects SQLite's shared in-memory connection in isolated tests too.
         self._lock = asyncio.Lock()
+        self.trends_only = trends_only
+        self._minutes: dict[tuple[str, datetime], Minute] = {}
 
     async def initialize(self) -> None:
         async with self.engine.begin() as connection:
@@ -80,13 +83,48 @@ class HistoryStore:
 
     async def append(self, event_id: str, received_at: datetime, change: StateChange) -> None:
         rows = []
-        if change.topic in KINDS:
+        aggregate = self.trends_only and change.topic == TELEMETRY_TOPIC
+        if change.topic in KINDS and not aggregate:
             rows.append(self._record(event_id, KINDS[change.topic], change.topic, received_at, change.message))
         if change.alert is not None:
             alert_event_id = change.alert.id if change.topic == ALERTS_TOPIC else event_id
             rows.append(self._record(alert_event_id, "alerts", ALERTS_TOPIC, received_at, change.alert))
         if rows:
             await self._write(rows)
+        if aggregate:
+            # After durable alert writes: retries cannot double-count a sample.
+            start = utc(received_at).replace(second=0, microsecond=0)
+            key = (change.message.device_id, start)
+            if key not in self._minutes:
+                minute = Minute(change.message.device_id, start)
+                async with self._lock, self.engine.connect() as connection:
+                    existing = await connection.scalar(select(events.c.data).where(
+                        events.c.event_id == minute.event_id, events.c.kind == "telemetry_trends"))
+                if existing is not None:
+                    minute.resume(TelemetryTrend.model_validate(existing))
+                self._minutes[key] = minute
+            self._minutes[key].add(change.message)
+
+    async def flush_trends(self, *, now: datetime | None = None, final: bool = False) -> None:
+        cutoff = utc(now or datetime.now(timezone.utc)).replace(second=0, microsecond=0)
+        pending = [(key, minute, minute.count) for key, minute in self._minutes.items()
+                   if final or minute.start < cutoff]
+        if not pending:
+            return
+        rows = [self._record(minute.event_id, "telemetry_trends", TELEMETRY_TOPIC,
+                             cutoff, minute.summary()) for _, minute, _ in pending]
+        insert = postgres_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+        statement = insert(events).values(rows)
+        statement = statement.on_conflict_do_update(
+            index_elements=["event_id", "kind"],
+            set_={"data": statement.excluded.data, "received_at": statement.excluded.received_at},
+        )
+        async with self._lock, self.engine.begin() as connection:
+            await connection.execute(statement)
+        for key, minute, count in pending:
+            if minute.count == count:
+                self._minutes.pop(key, None)
+        self.available = True
 
     async def append_alert(self, alert: Alert) -> None:
         await self._write([self._record(alert.id, "alerts", ALERTS_TOPIC, datetime.now(timezone.utc), alert)])
@@ -116,7 +154,8 @@ class HistoryStore:
                            next_before_id=items[-1].id if len(rows) > limit else None)
 
     async def restore(self, store: StateService) -> None:
-        telemetry = (await self.page("telemetry", limit=store.history.maxlen)).items
+        # A minute average must never be presented as a live sensor reading.
+        telemetry = [] if self.trends_only else (await self.page("telemetry", limit=store.history.maxlen)).items
         vision = (await self.page("vision", limit=1)).items
         anomalies = (await self.page("anomalies", limit=store.anomaly_history.maxlen)).items
         alerts = (await self.page("alerts", limit=50)).items

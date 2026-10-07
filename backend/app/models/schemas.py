@@ -62,6 +62,16 @@ class VisionResult(Timestamped):
     source: StrictStr = Field(min_length=1)
 
 
+class TelemetryTrend(SensorTelemetry):
+    aggregation: Literal["minute"] = "minute"
+    sample_count: int = Field(ge=1)
+    minimum: SensorFeatures
+    maximum: SensorFeatures
+    motion_count: int = Field(ge=0)
+    motion_transitions: int = Field(ge=0)
+    last_motion: StrictBool
+
+
 class DeviceStatus(PayloadModel):
     device_id: StrictStr = Field(min_length=1)
     online: StrictBool
@@ -167,7 +177,7 @@ class SentinelState(PayloadModel):
     alerts: list[Alert] = Field(default_factory=list)
 
 
-HistoryKind = Literal["telemetry", "vision", "anomalies", "alerts"]
+HistoryKind = Literal["telemetry", "telemetry_trends", "vision", "anomalies", "alerts"]
 
 
 class HistoryEntry(PayloadModel):
@@ -175,7 +185,7 @@ class HistoryEntry(PayloadModel):
     ts: datetime
     received_at: datetime
     topic: str
-    data: SensorTelemetry | VisionResult | AnomalyResult | Alert
+    data: TelemetryTrend | SensorTelemetry | VisionResult | AnomalyResult | Alert
 
 
 class HistoryPage(PayloadModel):

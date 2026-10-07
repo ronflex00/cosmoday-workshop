@@ -69,6 +69,7 @@ racine contient des paramètres d'infrastructure et n'est pas le profil local.
 | `API_PORT` | `8000` | Port HTTP |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines HTTP(S) explicites, séparées par des virgules |
 | `API_HISTORY_LIMIT` | `120` | Nombre de points du cache temps réel, entre 1 et 120 |
+| `TELEMETRY_STORAGE` | `raw` | `trends` sur le Pi : direct complet, résumés persistants par minute ; voir le [guide](../docs/telemetry-trends.md) |
 | `DATABASE_URL` | `sqlite:///data/sentinel.db` | Base persistante ; chemins SQLite relatifs à `backend/`, ou URL PostgreSQL |
 | `DATABASE_PASSWORD_FILE` | vide | Alternative à `DATABASE_URL` : secret PostgreSQL avec `DATABASE_HOST` (db), `DATABASE_PORT` (5432), `POSTGRES_USER` et `POSTGRES_DB` (sentinel) |
 

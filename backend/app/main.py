@@ -23,6 +23,16 @@ from .services.history import HistoryStore
 logger = logging.getLogger("API")
 
 
+async def persist_trends(history: HistoryStore, stop: Event) -> None:
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(history.flush_trends(), timeout=6)
+        except (SQLAlchemyError, OSError, TimeoutError):
+            history.available = False
+            logger.error("Cannot save minute summaries; retained in memory for retry")
+        await asyncio.to_thread(stop.wait, 5)
+
+
 async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Event,
                          sockets: WebSocketManager, mqtt_client: MQTTClient,
                          history: HistoryStore) -> None:
@@ -68,9 +78,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.info("Sentinel-X backend starting")
         events = Queue(maxsize=128)
         stop = Event()
-        history = HistoryStore(settings.database_url)
+        history = HistoryStore(settings.database_url, trends_only=settings.telemetry_storage == "trends")
         app.state.history = history
         consumer = None
+        trend_writer = None
         mqtt_client = None
         try:
             try:
@@ -85,6 +96,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             consumer = asyncio.create_task(consume_events(events, app.state.store, stop,
                                                           app.state.sockets, mqtt_client, history))
             mqtt_client.start()
+            if history.trends_only:
+                trend_writer = asyncio.create_task(persist_trends(history, stop))
             yield
         finally:
             try:
@@ -95,6 +108,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 try:
                     if consumer is not None:
                         await consumer
+                        if trend_writer is not None:
+                            await trend_writer
+                            try:
+                                await asyncio.wait_for(history.flush_trends(final=True), timeout=6)
+                            except (SQLAlchemyError, OSError, TimeoutError):
+                                logger.error("Could not save pending minute summaries at shutdown")
                         await app.state.sockets.close()
                         change = app.state.store.prepare_connection(False)
                         if change is not None:

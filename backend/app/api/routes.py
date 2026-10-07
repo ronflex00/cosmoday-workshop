@@ -86,7 +86,7 @@ async def historical_data(
         end = end.astimezone(timezone.utc)
     if start is not None and end is not None and start > end:
         raise HTTPException(status_code=422, detail="start must be before or equal to end")
-    if device_id is not None and kind != "telemetry":
+    if device_id is not None and kind not in {"telemetry", "telemetry_trends"}:
         raise HTTPException(status_code=422, detail="device_id is supported only for telemetry history")
     history = request.app.state.history
     try:
