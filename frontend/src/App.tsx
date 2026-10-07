@@ -38,6 +38,7 @@ function OverviewDashboard() {
   const online = connected && !!state?.system.mqtt_connected;
   const telemetry = state?.telemetry;
   const telemetryFresh = online && isFresh(telemetry?.ts, now);
+  const motionFresh = telemetryFresh && state?.device?.online !== false;
   const visionFresh = online && isFresh(state?.vision?.ts, now);
   const anomalyFresh = online && isFresh(state?.anomaly?.ts, now);
 
@@ -72,7 +73,7 @@ function OverviewDashboard() {
             <SensorCard title="Temperature" value={formatNumber(telemetry?.temperature)} unit="°C" icon={Thermometer} detail={readingDetail} live={telemetryFresh} id="temperature-value" />
             <SensorCard title="Humidity" value={formatNumber(telemetry?.humidity)} unit="%" icon={Droplets} detail={readingDetail} live={telemetryFresh} id="humidity-value" />
             <SensorCard title="Gas" value={formatNumber(telemetry?.gas, true)} unit="raw" icon={Wind} detail={telemetryFresh ? 'Raw sensor value' : readingDetail} live={telemetryFresh} id="gas-value" />
-            <SensorCard title="Motion" value={!telemetry ? 'UNKNOWN' : telemetry.motion ? 'YES' : 'NO'} icon={Radio} detail={telemetryFresh ? telemetry?.motion ? 'Motion detected' : 'No movement detected' : readingDetail} live={telemetryFresh} motion={!!telemetry?.motion} id="motion-value" />
+            <SensorCard title="Motion" value={!motionFresh ? 'UNKNOWN' : telemetry?.motion ? 'YES' : 'NO'} icon={Radio} detail={motionFresh ? telemetry?.motion ? 'Presence within 80 cm' : 'No nearby presence detected' : state?.device?.online === false ? 'Sensor node offline' : readingDetail} live={motionFresh} motion={motionFresh && !!telemetry?.motion} id="motion-value" />
           </div>
         </section>
 

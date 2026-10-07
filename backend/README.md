@@ -6,6 +6,8 @@ communs sont dans [`../docs/contracts.md`](../docs/contracts.md).
 Le client Paho s'abonne automatiquement à :
 
 - `sentinel/telemetry`
+- `sentinel/status/device`
+- `sentinel/alerts`
 - `sentinel/ai/vision`
 - `sentinel/ai/anomaly`
 
@@ -20,7 +22,11 @@ Le cache temps réel conserve au maximum 120 télémétries dans une `deque`.
 L'historique complet est conservé dans SQLite localement, ou PostgreSQL avec
 `DATABASE_URL`. Le backend recharge les données récentes et les alertes au
 redémarrage ; une coupure MQTT indique `mqtt_connected=false`.
-La reconnexion est automatique et renouvelle les trois abonnements.
+La reconnexion est automatique et renouvelle les abonnements.
+L'état de présence de l'ESP est exposé dans `state.device` et renouvelé par le
+statut retenu du broker. Les alertes MQTT sont persistées sans être republiées.
+Le déploiement Docker sur le Pi utilise SQLite dans le volume `api_data` ;
+voir le [guide MQTT → API → dashboard](../docs/api-mqtt-dashboard.md).
 L'API conserve aussi les 120 derniers résultats du modèle d'anomalie pour afficher
 l'évolution de ses scores avec les séries capteurs.
 
@@ -55,6 +61,7 @@ racine contient des paramètres d'infrastructure et n'est pas le profil local.
 | `MQTT_HOST` | `localhost` | Adresse du broker |
 | `MQTT_PORT` | `1883`, ou `8883` si TLS activé | Port du broker ; `18883` pour la démo PC |
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | vides | Identifiants optionnels |
+| `MQTT_PASSWORD_FILE` | vide | Fichier privé contenant le mot de passe ; exclusif avec `MQTT_PASSWORD` |
 | `MQTT_TLS` | `false` | Activer TLS avec vérification des certificats |
 | `MQTT_TLS_CA` | vide | Chemin du certificat CA ; vide utilise les CA système |
 | `MQTT_TLS_CERT` / `MQTT_TLS_KEY` | vides | Certificat et clé client, à fournir ensemble |

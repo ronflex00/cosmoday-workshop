@@ -10,11 +10,15 @@ export default function SystemStatus({ state, connected, now }: {
   const mqtt = connected && !!state?.system.mqtt_connected;
   const visionFresh = mqtt && isFresh(state?.vision?.ts, now);
   const anomalyFresh = mqtt && isFresh(state?.anomaly?.ts, now);
+  const device = state?.device;
   const statuses = [
     { label: 'BACKEND', icon: Server, id: 'backend-status', value: connected ? 'ONLINE' : 'CONNECTING',
       tone: connected ? 'success' : 'warning' },
     { label: 'MQTT BROKER', icon: Network, id: 'mqtt-status', value: !connected ? 'UNKNOWN' : mqtt ? 'CONNECTED' : 'OFFLINE',
       tone: mqtt ? 'success' : 'neutral' },
+    { label: 'ESP NODE', icon: Network, id: 'device-status',
+      value: !mqtt || !device ? 'UNKNOWN' : device.online ? 'ONLINE' : 'OFFLINE',
+      tone: mqtt && device?.online ? 'success' : 'neutral' },
     { label: 'AI VISION', icon: Camera, id: 'vision-status',
       value: !state?.vision ? 'WAITING' : !mqtt ? 'OFFLINE' : visionFresh ? 'ONLINE' : 'STALE',
       tone: visionFresh ? 'success' : 'neutral' },
@@ -25,7 +29,7 @@ export default function SystemStatus({ state, connected, now }: {
   ] as const;
 
   return (
-    <section className="system-strip grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5" aria-label="System status">
+    <section className="system-strip grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" aria-label="System status">
       {statuses.map(({ label, icon: Icon, id, value, tone }) => (
         <div key={label} className="system-item">
           <span className="system-label"><Icon size={14} aria-hidden="true" />{label}</span>

@@ -17,6 +17,13 @@ export interface VisionResult {
   source: string;
 }
 
+export interface DeviceStatus {
+  device_id: string;
+  online: boolean;
+  ip: string | null;
+  rssi: number | null;
+}
+
 export type AnomalyResult = {
   ts: string;
   model: string;
@@ -36,6 +43,7 @@ export interface Alert {
 
 export interface SentinelState {
   telemetry: SensorTelemetry | null;
+  device?: DeviceStatus | null;
   vision: VisionResult | null;
   anomaly: AnomalyResult | null;
   system: { mqtt_connected: boolean; last_update: string | null };
@@ -88,6 +96,15 @@ function isVision(value: unknown): value is VisionResult {
     && typeof value.source === 'string' && value.source.length > 0;
 }
 
+function isDeviceStatus(value: unknown): value is DeviceStatus {
+  return isRecord(value) && typeof value.device_id === 'string' && value.device_id.trim().length > 0
+    && typeof value.online === 'boolean'
+    && (value.ip === null || typeof value.ip === 'string')
+    && (value.rssi === null || (isNumber(value.rssi) && Number.isInteger(value.rssi)
+      && value.rssi >= -127 && value.rssi <= 0))
+    && (!value.online || (typeof value.ip === 'string' && isNumber(value.rssi)));
+}
+
 function isAnomaly(value: unknown): value is AnomalyResult {
   return isRecord(value) && isTimestamp(value.ts) && typeof value.model === 'string'
     && value.model.length > 0 && isFeatures(value.features) && (
@@ -106,6 +123,7 @@ function isAlert(value: unknown): value is Alert {
 export function isSentinelState(value: unknown): value is SentinelState {
   return isRecord(value)
     && (value.telemetry === null || isTelemetry(value.telemetry))
+    && (value.device === undefined || value.device === null || isDeviceStatus(value.device))
     && (value.vision === null || isVision(value.vision))
     && (value.anomaly === null || isAnomaly(value.anomaly))
     && isRecord(value.system) && typeof value.system.mqtt_connected === 'boolean'

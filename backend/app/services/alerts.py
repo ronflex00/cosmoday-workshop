@@ -32,6 +32,12 @@ class AlertsService:
     def recent(self) -> list[Alert]:
         return list(reversed(self._history))
 
+    def contains(self, payload: AlertCreate) -> bool:
+        # The API subscribes to alerts it also publishes. Ignore its own echo
+        # and repeated incoming events, regardless of lowercase MQTT type.
+        return any(alert.model_dump(exclude={"id"}) == payload.model_dump()
+                   for alert in self._history)
+
     def restore(self, alerts: list[Alert]) -> None:
         self._history.clear()
         self._history.extend(alerts)

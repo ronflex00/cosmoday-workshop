@@ -1,16 +1,18 @@
 """MQTT contract, including the validated AI calibration extension."""
 
 from datetime import datetime, timedelta
+from ipaddress import ip_address
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator, model_validator
 
 TELEMETRY_TOPIC = "sentinel/telemetry"
 VISION_TOPIC = "sentinel/ai/vision"
 ANOMALY_TOPIC = "sentinel/ai/anomaly"
 COMMANDS_TOPIC = "sentinel/commands"
 ALERTS_TOPIC = "sentinel/alerts"
-INPUT_TOPICS = (TELEMETRY_TOPIC, VISION_TOPIC, ANOMALY_TOPIC)
+DEVICE_STATUS_TOPIC = "sentinel/status/device"
+INPUT_TOPICS = (TELEMETRY_TOPIC, VISION_TOPIC, ANOMALY_TOPIC, DEVICE_STATUS_TOPIC, ALERTS_TOPIC)
 Number = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 
 
@@ -58,6 +60,33 @@ class VisionResult(Timestamped):
     person_detected: StrictBool
     confidence: Number = Field(ge=0, le=1)
     source: StrictStr = Field(min_length=1)
+
+
+class DeviceStatus(PayloadModel):
+    device_id: StrictStr = Field(min_length=1)
+    online: StrictBool
+    ip: StrictStr | None = None
+    rssi: StrictInt | None = Field(default=None, ge=-127, le=0)
+
+    @field_validator("device_id")
+    @classmethod
+    def device_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("device_id must not be blank")
+        return value
+
+    @field_validator("ip")
+    @classmethod
+    def valid_ip(cls, value: str | None) -> str | None:
+        if value is not None:
+            ip_address(value)
+        return value
+
+    @model_validator(mode="after")
+    def online_fields(self):
+        if self.online and (self.ip is None or self.rssi is None):
+            raise ValueError("Online status requires ip and rssi")
+        return self
 
 
 class AnomalyResult(Timestamped):
@@ -129,6 +158,7 @@ class CommandResult(PayloadModel):
 
 class SentinelState(PayloadModel):
     telemetry: SensorTelemetry | None = None
+    device: DeviceStatus | None = None
     vision: VisionResult | None = None
     anomaly: AnomalyResult | None = None
     system: SystemStatus = Field(default_factory=SystemStatus)

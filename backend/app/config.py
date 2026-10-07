@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -36,6 +36,25 @@ def default_database_url() -> str:
     return database_url("sqlite:///data/sentinel.db")
 
 
+def configured_database_url() -> str:
+    path = os.environ.get("DATABASE_PASSWORD_FILE", "")
+    if not path:
+        return database_url(os.environ.get("DATABASE_URL", default_database_url()))
+    if os.environ.get("DATABASE_URL"):
+        raise ValueError("Use DATABASE_URL or DATABASE_PASSWORD_FILE, not both")
+    try:
+        password = Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeError):
+        raise ValueError("Cannot read DATABASE_PASSWORD_FILE") from None
+    if not password or "\n" in password or "\r" in password:
+        raise ValueError("DATABASE_PASSWORD_FILE must contain one nonempty password")
+    return database_url(URL.create(
+        "postgresql+asyncpg", username=os.environ.get("POSTGRES_USER", "sentinel"),
+        password=password, host=os.environ.get("DATABASE_HOST", "db"),
+        port=_port("DATABASE_PORT", 5432), database=os.environ.get("POSTGRES_DB", "sentinel"),
+    ).render_as_string(hide_password=False))
+
+
 def _port(name: str, default: int) -> int:
     try:
         value = int(os.environ.get(name, default))
@@ -51,6 +70,22 @@ def _boolean(name: str, default: bool = False) -> bool:
     if value not in {"true", "false", "1", "0", "yes", "no"}:
         raise ValueError(f"{name} must be true or false")
     return value in {"true", "1", "yes"}
+
+
+def _mqtt_password() -> str:
+    password = os.environ.get("MQTT_PASSWORD", "")
+    path = os.environ.get("MQTT_PASSWORD_FILE", "")
+    if not path:
+        return password
+    if password:
+        raise ValueError("Use MQTT_PASSWORD or MQTT_PASSWORD_FILE, not both")
+    try:
+        password = Path(path).read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeError):
+        raise ValueError("Cannot read MQTT_PASSWORD_FILE") from None
+    if not password or "\n" in password or "\r" in password:
+        raise ValueError("MQTT_PASSWORD_FILE must contain one nonempty password")
+    return password
 
 
 @dataclass(frozen=True)
@@ -81,7 +116,7 @@ class Settings:
         if not host or not api_host:
             raise ValueError("MQTT_HOST and API_HOST must not be empty")
         username = os.environ.get("MQTT_USERNAME", "")
-        password = os.environ.get("MQTT_PASSWORD", "")
+        password = _mqtt_password()
         if password and not username:
             raise ValueError("MQTT_USERNAME is required when MQTT_PASSWORD is set")
         cert = os.environ.get("MQTT_TLS_CERT") or None
@@ -106,4 +141,4 @@ class Settings:
                    mqtt_tls_cert=cert, mqtt_tls_key=key,
                    api_host=api_host, api_port=_port("API_PORT", 8000),
                    cors_origins=origins, history_limit=history_limit,
-                   database_url=database_url(os.environ.get("DATABASE_URL", default_database_url())))
+                   database_url=configured_database_url())

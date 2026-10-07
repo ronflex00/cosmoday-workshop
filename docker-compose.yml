@@ -30,31 +30,100 @@ services:
     image: postgres:16-alpine
     container_name: sentinel-db
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
+      - type: bind
+        source: ./secrets/db/password
+        target: /run/secrets/postgres_password
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # L'équipe API peut activer ce service dès qu'un Dockerfile existe dans backend/.
-  # api:
-  #   build: ./backend
-  #   container_name: sentinel-api
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   depends_on:
-  #     - mqtt
-  #     - db
-  #   ports:
-  #     - "8000:8000"
+  api:
+    profiles: [api]
+    build: ./backend
+    container_name: sentinel-api
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "8883"
+      MQTT_TLS: "true"
+      MQTT_TLS_CA: /run/certs/ca.crt
+      MQTT_USERNAME: sentinel-api
+      MQTT_PASSWORD_FILE: /run/secrets/mqtt_api_password
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      API_HISTORY_LIMIT: "120"
+      DATABASE_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
+    depends_on:
+      mqtt:
+        condition: service_started
+      db:
+        condition: service_healthy
+    ports:
+      # Admin accesses REST/WS through authenticated SSH forwarding.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Retained for SQLite migration and rollback, not live storage.
+      - api_data:/app/data
+      - type: bind
+        source: ./secrets/db/password
+        target: /run/secrets/postgres_password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./infra/mosquitto/certs/ca.crt
+        target: /run/certs/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./secrets/api/mqtt_password
+        target: /run/secrets/mqtt_api_password
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Le frontend peut être lancé en dev localement puis conteneurisé le dernier jour.
 
 volumes:
   mqtt_data:
   postgres_data:
+  api_data:

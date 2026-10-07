@@ -80,10 +80,11 @@ class HistoryStore:
 
     async def append(self, event_id: str, received_at: datetime, change: StateChange) -> None:
         rows = []
-        if change.topic is not None:
+        if change.topic in KINDS:
             rows.append(self._record(event_id, KINDS[change.topic], change.topic, received_at, change.message))
         if change.alert is not None:
-            rows.append(self._record(event_id, "alerts", ALERTS_TOPIC, received_at, change.alert))
+            alert_event_id = change.alert.id if change.topic == ALERTS_TOPIC else event_id
+            rows.append(self._record(alert_event_id, "alerts", ALERTS_TOPIC, received_at, change.alert))
         if rows:
             await self._write(rows)
 

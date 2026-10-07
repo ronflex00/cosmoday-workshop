@@ -1,33 +1,38 @@
 """Prepare updates before persistence; apply the live state after the DB commit."""
 
 import logging
+import json
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import ValidationError
 
 from ..models.schemas import (
-    ANOMALY_TOPIC, TELEMETRY_TOPIC, VISION_TOPIC, Alert, AlertCreate, AnomalyResult,
+    ALERTS_TOPIC, DEVICE_STATUS_TOPIC, ANOMALY_TOPIC, TELEMETRY_TOPIC, VISION_TOPIC,
+    Alert, AlertCreate, AnomalyResult, DeviceStatus,
     SentinelState, SensorTelemetry, SystemStatus, VisionResult,
 )
 from .alerts import AlertsService
 
 logger = logging.getLogger("MQTT")
 SCHEMAS = {TELEMETRY_TOPIC: SensorTelemetry, VISION_TOPIC: VisionResult,
-           ANOMALY_TOPIC: AnomalyResult}
+           ANOMALY_TOPIC: AnomalyResult, DEVICE_STATUS_TOPIC: DeviceStatus,
+           ALERTS_TOPIC: AlertCreate}
 
 
 @dataclass(frozen=True)
 class StateChange:
     topic: str | None
-    message: SensorTelemetry | VisionResult | AnomalyResult | bool
+    message: SensorTelemetry | VisionResult | AnomalyResult | DeviceStatus | AlertCreate | bool
     alert: Alert | None
 
 
 class StateService:
     def __init__(self, history_limit: int = 120):
         self.telemetry = None
+        self.device = None
         self.vision = None
         self.anomaly = None
         self.system = SystemStatus()
@@ -74,6 +79,16 @@ class StateService:
             logger.warning("Ignoring invalid payload on %s (%s)", topic, ", ".join(locations))
             return None
         alert = None
+        if topic == DEVICE_STATUS_TOPIC and message == self.device:
+            return None
+        if topic == ALERTS_TOPIC:
+            if self.alerts.contains(message):
+                return None
+            # Stable identity makes a replay/retry of the same MQTT event
+            # idempotent in durable history, which has no MQTT alert ID.
+            identity = json.dumps(message.model_dump(mode="json"), sort_keys=True)
+            alert = Alert(id=str(uuid5(NAMESPACE_URL, "sentinel/alerts:" + identity)),
+                          **message.model_dump())
         if topic == VISION_TOPIC and message.person_detected and not (self.vision and self.vision.person_detected):
             alert = self.alerts.make(AlertCreate(ts=message.ts, type="INTRUSION", severity="critical",
                                                 message="Human presence detected"))
@@ -91,9 +106,11 @@ class StateService:
             self.history.append(change.message)
         elif change.topic == VISION_TOPIC:
             self.vision = change.message
-        else:
+        elif change.topic == ANOMALY_TOPIC:
             self.anomaly = change.message
             self.anomaly_history.append(change.message)
+        elif change.topic == DEVICE_STATUS_TOPIC:
+            self.device = change.message
         if change.alert:
             self.alerts.record(change.alert)
         self.system = SystemStatus(mqtt_connected=self.system.mqtt_connected,
@@ -113,13 +130,15 @@ class StateService:
         self.anomaly_history.clear()
         self.anomaly_history.extend(anomalies)
         self.telemetry = self.history[-1] if self.history else None
+        # Device presence must come from a fresh broker status, not the DB.
+        self.device = None
         self.vision = vision
         self.anomaly = self.anomaly_history[-1] if self.anomaly_history else None
         self.alerts.restore(alerts)
         self.system = SystemStatus(mqtt_connected=False, last_update=last_update)
 
     def snapshot(self) -> SentinelState:
-        return SentinelState(telemetry=self.telemetry, vision=self.vision,
+        return SentinelState(telemetry=self.telemetry, device=self.device, vision=self.vision,
                              anomaly=self.anomaly, system=self.system,
                              history=list(self.history),
                              anomaly_history=list(self.anomaly_history),

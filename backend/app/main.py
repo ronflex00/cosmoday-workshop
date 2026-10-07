@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from .api.routes import router
 from .api.websocket import WebSocketManager, router as websocket_router
 from .config import Settings
+from .models.schemas import ALERTS_TOPIC
 from .mqtt.client import MQTTClient, MQTTEvent
 from .services.state import StateService
 from .services.history import HistoryStore
@@ -50,7 +51,7 @@ async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Ev
                         await asyncio.to_thread(stop.wait, 1)
                 store.apply_change(change)
                 sockets.broadcast(store.snapshot())
-                if change.alert is not None:
+                if change.alert is not None and change.topic != ALERTS_TOPIC:
                     mqtt_client.publish_alert(change.alert)
         except Exception:
             logger.exception("Cannot process MQTT event; skipping")
