@@ -1,0 +1,33 @@
+# Account names must match the password file. Unlisted topics are denied.
+# Topics are defined in docs/contracts.md.
+user sentinel-esp
+topic write sentinel/telemetry
+topic write sentinel/status/device
+topic write sentinel/alerts
+topic read sentinel/alerts
+topic read sentinel/commands
+
+user sentinel-api
+topic read sentinel/telemetry
+topic read sentinel/status/device
+topic read sentinel/ai/vision
+topic read sentinel/ai/anomaly
+topic read sentinel/alerts
+# Existing API endpoints still publish manual alerts/commands.
+topic write sentinel/alerts
+topic write sentinel/commands
+
+user sentinel-ai
+topic read sentinel/telemetry
+topic write sentinel/ai/vision
+topic write sentinel/ai/anomaly
+
+# Future Raspberry Pi decision service: separate from the read/display API.
+user sentinel-controller
+topic read sentinel/telemetry
+topic read sentinel/status/device
+topic read sentinel/ai/vision
+topic read sentinel/ai/anomaly
+topic read sentinel/alerts
+topic write sentinel/alerts
+topic write sentinel/commands

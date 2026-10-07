@@ -11,3 +11,6 @@ Raspberry Pi 5 :
 - journalisation et vérifications de ports.
 
 Ne jamais versionner les clés privées dans `infra/mosquitto/certs`.
+
+Voir [`docs/mqtt-tls.md`](../docs/mqtt-tls.md) pour préparer le broker Docker
+sécurisé. Créer les certificats et comptes sur le Pi avant de démarrer `mqtt`.

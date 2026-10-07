@@ -7,6 +7,9 @@
 *.crt
 *.p12
 secrets/
+infra/mosquitto/certs/
+infra/mosquitto/config/passwords
+firmware/esp8266/sentinel_x/config.h
 
 # Python
 __pycache__/

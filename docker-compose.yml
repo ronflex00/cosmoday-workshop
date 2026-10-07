@@ -4,13 +4,27 @@ services:
     container_name: sentinel-mqtt
     restart: unless-stopped
     ports:
-      - "1883:1883"
       - "8883:8883"
     volumes:
       - ./infra/mosquitto/config:/mosquitto/config:ro
-      - ./infra/mosquitto/certs:/mosquitto/certs:ro
+      - type: bind
+        source: ./infra/mosquitto/certs
+        target: /mosquitto/certs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./secrets/mqtt/passwords
+        target: /mosquitto/secrets/passwords
+        read_only: true
+        bind:
+          create_host_path: false
       - mqtt_data:/mosquitto/data
-      - mqtt_logs:/mosquitto/log
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: postgres:16-alpine
@@ -43,5 +57,4 @@ services:
 
 volumes:
   mqtt_data:
-  mqtt_logs:
   postgres_data:
