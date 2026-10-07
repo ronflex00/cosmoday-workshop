@@ -186,7 +186,7 @@ mosquitto_sub -h localhost -p 18883 \
   -t sentinel/telemetry -t sentinel/ai/vision -t sentinel/ai/anomaly -v
 ```
 
-`/health` valide HTTP uniquement. `system.mqtt_connected` dans `/api/v1/state`
+`/health` valide HTTP et signale les échecs de stockage avec `503`. `system.mqtt_connected` dans `/api/v1/state`
 valide la connexion MQTT. Des champs IA ou capteurs `null` signifient qu'aucune
 donnée valide n'a encore été reçue.
 
@@ -194,13 +194,14 @@ donnée valide n'a encore été reçue.
 
 Arrêter puis relancer l'API avec les mêmes paramètres : React garde les dernières
 lectures pendant la coupure, bloque les commandes, puis se reconnecte sans
-recharger la page. L'API repart avec un état vide et se remplit aux publications
-suivantes. Une coupure du broker conserve l'état backend ; Paho renouvelle ses
+recharger la page. L'API recharge les données récentes depuis la même base, puis
+reprend les publications suivantes. Une coupure du broker conserve l'état backend ; Paho renouvelle ses
 abonnements à la reconnexion.
 
 Lancer un seul processus backend. Plusieurs workers posséderaient chacun un état
-en mémoire et pourraient dupliquer les alertes. L'historique est limité à
-120 mesures, les alertes à 50. Une détection positive répétée ne crée pas de
+en mémoire et pourraient dupliquer les alertes. Le cache temps réel est limité à
+120 mesures et 50 alertes ; l'historique complet est consultable dans les
+[endpoints de stockage](history.md). Une détection positive répétée ne crée pas de
 nouvelle alerte avant un retour à `false`.
 
 ## Vérifications reproductibles
