@@ -44,13 +44,14 @@ def configuration():
     defaults = dict(MQTT_HOST='localhost', MQTT_PORT='18883', MQTT_TLS='false',
                     MQTT_USERNAME='', MQTT_PASSWORD='', MQTT_TLS_CA='', MQTT_TLS_CERT='', MQTT_TLS_KEY='',
                     API_HOST='127.0.0.1', API_PORT='8000', FRONTEND_HOST='localhost', FRONTEND_PORT='5173',
+                    AI_VISION_STREAM_HOST='127.0.0.1', AI_VISION_STREAM_PORT='8765',
                     AI_CAMERA_INDEX='0', AI_SHOW_WINDOW='false', AI_TRAINING_SAMPLES='20',
                     AI_CONTAMINATION='0.1', AI_LOG_LEVEL='INFO', OMP_NUM_THREADS='2', PYTHONUNBUFFERED='1')
     for name, value in defaults.items():
         env.setdefault(name, values.get(name, value))
     for name, value in values.items():
         env.setdefault(name, value)
-    for name in ('MQTT_PORT', 'API_PORT', 'FRONTEND_PORT'):
+    for name in ('MQTT_PORT', 'API_PORT', 'FRONTEND_PORT', 'AI_VISION_STREAM_PORT'):
         if not env[name].isdigit() or not 1 <= int(env[name]) <= 65535:
             raise ValueError(f'{name} must be between 1 and 65535')
     api_host = 'localhost' if env['API_HOST'] == '0.0.0.0' else env['API_HOST']
@@ -60,6 +61,9 @@ def configuration():
     env.setdefault('CORS_ORIGINS', ui_url)
     env.setdefault('VITE_API_URL', api_url)
     env.setdefault('VITE_WS_URL', api_url.replace('http://', 'ws://', 1) + '/ws')
+    stream_host = 'localhost' if env['AI_VISION_STREAM_HOST'] == '0.0.0.0' else env['AI_VISION_STREAM_HOST']
+    env.setdefault('AI_VISION_STREAM_ORIGIN', ui_url)
+    env.setdefault('VITE_VISION_STREAM_URL', f"http://{stream_host}:{env['AI_VISION_STREAM_PORT']}/stream.mjpg")
     env.setdefault('VITE_DATA_STALE_SECONDS', '30')
     env.setdefault('AI_YOLO_MODEL', str(ROOT / 'ai/yolov8n.pt'))
     return env, api_url, ui_url
@@ -124,7 +128,10 @@ def launch(args):
     for program in ('node', 'mosquitto', 'mosquitto_sub'):
         if shutil.which(program) is None:
             raise RuntimeError(f'Missing prerequisite: {program}')
-    for port in (env['API_PORT'], env['FRONTEND_PORT']):
+    ports = [env['API_PORT'], env['FRONTEND_PORT']]
+    if not args.no_camera:
+        ports.append(env['AI_VISION_STREAM_PORT'])
+    for port in ports:
         if busy(port):
             raise RuntimeError(f'Port {port} is already used. Stop the existing service or set different ports in .env.local.')
     RUNTIME.mkdir(exist_ok=True)

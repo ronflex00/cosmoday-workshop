@@ -4,7 +4,7 @@ Monorepo du prototype SENTINEL-X : surveillance environnementale, détection d'i
 
 ## Récupérer et lancer la version complète
 
-La branche **`feat/integration`** réunit le backend, le dashboard et l'IA validée.
+La branche **`main`** réunit le backend, les dashboards et l'IA validée.
 Un seul clone suffit ; aucun worktree voisin ni chemin personnel n'est requis.
 
 Prérequis : **Linux**, **Python 3.11+**, **Node.js 20.19+ dans la série 20, ou 22.12+**,
@@ -19,7 +19,7 @@ aussi les bibliothèques GL/GLib pour le mode webcam. Node et npm doivent être
 disponibles dans les versions indiquées ci-dessus.
 
 ```bash
-git clone --branch feat/integration --single-branch https://github.com/ronflex00/cosmoday-workshop.git
+git clone --branch main --single-branch https://github.com/ronflex00/cosmoday-workshop.git
 cd cosmoday-workshop
 bash scripts/setup_local.sh
 python3 scripts/local.py start
@@ -30,6 +30,11 @@ FastAPI (`8000`), React (`5173`), YOLO sur la webcam et IsolationForest.
 Il attend l'abonnement IA avant de démarrer les capteurs simulés : 20 mesures
 normales, puis cinq valeurs extrêmes, répétées sous l'identifiant `sentinel-demo`.
 La décision d'anomalie vient du modèle. Les services restent en arrière-plan.
+
+Les pages **http://localhost:5173/vision** et
+**http://localhost:5173/environment** affichent respectivement le flux caméra
+annoté et le suivi environnemental avec l'historique des scores IA. Le service
+IA fournit le flux MJPEG et ses métriques sur le port local `8765`.
 
 ```bash
 python3 scripts/local.py status
@@ -58,9 +63,9 @@ Configuration optionnelle, sans modifier le code :
 cp -n local.env.example .env.local
 ```
 
-Modifier hôte/port MQTT, ports API/frontend, index caméra ou paramètres IA dans
+Modifier hôte/port MQTT, ports API/frontend/vision, index caméra ou paramètres IA dans
 `.env.local`, puis arrêter et relancer le lanceur. Les variables du terminal
-ont priorité. Les URL API/WebSocket et CORS suivent les ports configurés, sauf
+ont priorité. Les URL API/WebSocket/vision et CORS suivent les ports configurés, sauf
 override explicite. Le profil local est distinct du `.env` racine destiné à
 l'infrastructure ; les profils réels, logs, venvs, dépendances et poids du modèle
 sont ignorés par Git.
@@ -174,7 +179,7 @@ python3 -m unittest discover -s tests -v
 (cd frontend && npm run build)
 ```
 
-Cela couvre les 19 tests IA, les 31 tests backend, les deux tests de propriété
+Cela couvre les 22 tests IA, les 32 tests backend, les deux tests de propriété
 des processus du lanceur et le build TypeScript/React. Les tests IA importent
 la vision ; ils nécessitent donc l'installation complète, même sans webcam
 branchée. L'installation `--no-camera` suffit pour les tests backend et lanceur.
@@ -208,7 +213,8 @@ destinés à être configurés par l'infrastructure.
 
 Le backend lit `backend/.env`, ou à défaut le `.env` racine. Les variables du
 terminal ont priorité. Vite lit `frontend/.env` ; ses variables sont intégrées
-au build. Le navigateur communique uniquement avec l'API.
+au build. Le navigateur utilise l'API pour l'état et les commandes, et le
+service IA pour le flux caméra et ses métriques.
 
 `docker-compose.yml` fournit les services d'infrastructure ; l'API et le frontend
 se lancent actuellement sur l'hôte. PostgreSQL, TLS et le déploiement permanent
@@ -216,9 +222,10 @@ restent à intégrer avec l'équipe infra. La webcam appartient au service IA.
 
 ## Travail dans cette branche
 
-`feat/integration` est la version complète à récupérer pour lancer la démo.
-Les branches `feat/api-dashboard` et `feat/ai` conservent leurs développements
-séparés. La branche d'intégration contient les deux historiques, et n'ajoute
+`main` est la version complète à récupérer pour lancer la démo, y compris les
+nouveaux dashboards vision et environnement.
+Les branches `feat/api-dashboard`, `feat/ai` et `feat/integration` conservent
+leurs développements séparés. `main` contient leurs historiques, et n'ajoute
 aucune dépendance au Raspberry pour une démonstration sur PC.
 Les fichiers `.env`, dépendances installées et builds sont ignorés par Git.
 Les commits et pushes sont déclenchés uniquement sur demande explicite.

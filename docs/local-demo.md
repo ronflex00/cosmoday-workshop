@@ -2,7 +2,7 @@
 
 ## Lancement complet depuis un seul clone
 
-Utiliser la branche `feat/integration` pour récupérer backend, frontend et IA
+Utiliser la branche `main` pour récupérer backend, frontend et IA
 ensemble. Depuis la racine du clone, après les prérequis Linux du README :
 
 ```bash
@@ -19,6 +19,10 @@ Sans webcam : utiliser `--no-camera` sur les deux commandes. Pour un ESP réel :
 ajouter `--no-demo` au lancement afin de ne pas mélanger les références capteurs.
 Le lancement local ne crée ni certificat ni listener MQTT accessible sur le LAN.
 Pour le Pi ou le broker infra, suivre le [guide Raspberry](raspberry.md).
+
+Les nouvelles vues sont accessibles sur `/vision` et `/environment`.
+Le profil local dérive aussi l'URL du flux caméra et son origine CORS ;
+`AI_VISION_STREAM_PORT` permet de changer le port `8765`.
 
 Les instructions détaillées à cinq terminaux ci-dessous restent disponibles
 pour observer ou diagnostiquer chaque composant séparément.
@@ -38,7 +42,7 @@ export SENTINEL_AI_REPO=/chemin/vers/le-depot-ia
 ```
 
 Si les branches sont déjà intégrées dans un seul dépôt, les deux variables
-doivent désigner le même dossier. C'est le cas de `feat/integration`.
+doivent désigner le même dossier. C'est le cas de `main`.
 Les chemins indiquent les racines contenant
 respectivement `backend/`, `frontend/` et `ai/`.
 

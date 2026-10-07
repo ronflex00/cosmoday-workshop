@@ -2,19 +2,19 @@
 
 Branches permanentes :
 
-- `main` : version stable et démontrable.
+- `main` : version complète et démontrable, avec IA, API et dashboards.
 - `feat/infra`
 - `feat/api-dashboard`
 - `feat/ai`
 - `feat/firmware`
-- `feat/integration` : version complète récupérable pour la démo locale.
+- `feat/integration` : branche de préparation de l'intégration.
 
 ## Récupérer la version intégrée
 
 Nouveau clone :
 
 ```bash
-git clone --branch feat/integration --single-branch https://github.com/ronflex00/cosmoday-workshop.git
+git clone --branch main --single-branch https://github.com/ronflex00/cosmoday-workshop.git
 cd cosmoday-workshop
 bash scripts/setup_local.sh
 python3 scripts/local.py start
@@ -25,13 +25,14 @@ Dans un clone existant dont le travail est sauvegardé :
 ```bash
 git status
 git fetch origin
-git switch --track origin/feat/integration
+git switch main
+git pull --ff-only origin main
 ```
 
-Si cette branche existe déjà localement, utiliser `git switch feat/integration`
-puis `git pull --ff-only`. Les branches de spécialité restent séparées ;
-la branche intégrée contient le backend/dashboard et l'IA sans dépendre
-de dossiers voisins. `main` n'est pas modifiée par cette publication.
+Si `main` n'existe pas encore localement, utiliser `git switch --track origin/main`
+après le fetch. Les branches de spécialité restent séparées ; `main` contient
+le backend, les dashboards vision/environnement et l'IA sans dépendre
+de dossiers voisins.
 
 ## Travail de l'équipe
 
