@@ -401,6 +401,14 @@ Ne pas mélanger la télémétrie réelle et simulée pendant l'apprentissage de
 
 ## Lancement headless
 
+Avec l'environnement déjà lancé par `src.environment_main`, utiliser
+`python -m src.vision_main` pour la webcam : ce lancement ne démarre pas de
+second modèle environnemental ni de second abonnement à la télémétrie.
+Il réutilise le compte MQTT IA mais un client MQTT distinct. Pour le dashboard
+accessible via le tunnel 8080, régler `AI_VISION_STREAM_ORIGIN=http://localhost:8080`
+et ajouter le transfert SSH `-L 8765:127.0.0.1:8765` au tunnel.
+La détection identifie la classe person et ses cadres, pas l'identité des personnes.
+
 Sur le Pi, depuis `ai/`, après configuration pour le broker infra :
 
 ```bash

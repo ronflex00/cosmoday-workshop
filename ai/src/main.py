@@ -47,9 +47,10 @@ class VisionPublisher:
         return True
 
 
-def main() -> int:
+def main(*, run_environment: bool = True) -> int:
     logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
-    logger.info("Starting Sentinel-X AI service (vision + anomalies)")
+    logger.info("Starting Sentinel-X AI service (%s)",
+                "vision + anomalies" if run_environment else "vision only")
     stop = Event()
     mqtt_client = None
     anomaly_worker = None
@@ -68,13 +69,14 @@ def main() -> int:
             raise RuntimeError("No graphical session; set AI_SHOW_WINDOW=false")
         for sig in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[sig] = signal.signal(sig, lambda signum, frame: stop.set())
-        telemetry_queue = Queue(maxsize=128)
-        anomaly_detector = AnomalyDetector(config.training_samples, config.contamination)
+        telemetry_queue = Queue(maxsize=128) if run_environment else None
         mqtt_client = MQTTClient(config, telemetry_queue)
-        anomaly_worker = Thread(target=process_telemetry,
-                                args=(telemetry_queue, anomaly_detector, mqtt_client, stop),
-                                name="anomaly-worker")
-        anomaly_worker.start()
+        if run_environment:
+            anomaly_detector = AnomalyDetector(config.training_samples, config.contamination)
+            anomaly_worker = Thread(target=process_telemetry,
+                                    args=(telemetry_queue, anomaly_detector, mqtt_client, stop),
+                                    name="anomaly-worker")
+            anomaly_worker.start()
         mqtt_client.start()
         detector = PersonDetector(config.yolo_model, config.confidence,
                                   config.inference_size)

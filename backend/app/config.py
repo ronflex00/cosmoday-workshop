@@ -104,6 +104,7 @@ class Settings:
     history_limit: int = 120
     telemetry_storage: str = "raw"
     ai_auto_alarm: bool = False
+    ai_vision_alarm: bool = False
     database_url: str = field(default_factory=default_database_url, repr=False)
 
     @classmethod
@@ -147,4 +148,5 @@ class Settings:
                    api_host=api_host, api_port=_port("API_PORT", 8000), telemetry_storage=telemetry_storage,
                    cors_origins=origins, history_limit=history_limit,
                    ai_auto_alarm=_boolean("AI_AUTO_ALARM"),
+                   ai_vision_alarm=_boolean("AI_VISION_ALARM"),
                    database_url=configured_database_url())

@@ -16,12 +16,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from .api.routes import router
 from .api.websocket import WebSocketManager, router as websocket_router
 from .config import Settings
-from .models.schemas import ALERTS_TOPIC, ANOMALY_TOPIC
+from .models.schemas import ALERTS_TOPIC, ANOMALY_TOPIC, VISION_TOPIC
 from .mqtt.client import MQTTClient, MQTTEvent
 from .services.state import StateService
 from .services.history import HistoryStore
 from .services.environment import EnvironmentIntelligence, FRESH_SECONDS, FUTURE_SECONDS
 from .services.alarm import AlarmOrchestrator
+from .services.vision_alarm import VisionAlarm
 
 logger = logging.getLogger("API")
 
@@ -39,7 +40,9 @@ async def persist_trends(history: HistoryStore, stop: Event) -> None:
 async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Event,
                          sockets: WebSocketManager, mqtt_client: MQTTClient,
                          history: HistoryStore, environment: EnvironmentIntelligence,
-                         alarm: AlarmOrchestrator) -> None:
+                         alarm: AlarmOrchestrator, *, environment_alarm: bool = True,
+                         vision_alarm: bool = False) -> None:
+    vision = VisionAlarm()
     while not stop.is_set() or not events.empty():
         try:
             event = await asyncio.to_thread(events.get, True, 0.2)
@@ -94,7 +97,14 @@ async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Ev
                     mqtt_client.publish_alert(alert)
                 if change.topic is None:
                     await alarm.set_connected(change.message)
-                elif decision is not None and decision.alert is not None:
+                else:
+                    transport_connected = (store.system.mqtt_connected and mqtt_client.connected
+                        and (event.generation is None or event.generation == mqtt_client.generation))
+                    vision_trigger = (vision_alarm and change.topic == VISION_TOPIC
+                        and vision.accept(change.message, connected=transport_connected))
+                    environment_trigger = environment_alarm and decision is not None and decision.alert is not None
+                    if not (vision_trigger or environment_trigger):
+                        continue
                     sample_time = change.message.ts
                     generation = event.generation
                     def still_eligible(sample_time=sample_time, generation=generation):
@@ -142,14 +152,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.store.alarm_command_ts = datetime.now(timezone.utc)
                 app.state.sockets.broadcast(app.state.store.snapshot())
 
-            alarm = AlarmOrchestrator(mqtt_client.publish_command, enabled=settings.ai_auto_alarm,
+            alarm = AlarmOrchestrator(mqtt_client.publish_command,
+                                      enabled=settings.ai_auto_alarm or settings.ai_vision_alarm,
                                       on_published=command_published,
                                       saved=saved_manual, persist=history.save_alarm_state,
                                       require_manual=app.state.store.system.last_update is not None)
             app.state.alarm = alarm
             consumer = asyncio.create_task(consume_events(events, app.state.store, stop,
                                                           app.state.sockets, mqtt_client, history,
-                                                          environment, alarm))
+                                                          environment, alarm,
+                                                          environment_alarm=settings.ai_auto_alarm,
+                                                          vision_alarm=settings.ai_vision_alarm))
             mqtt_client.start()
             if history.trends_only:
                 trend_writer = asyncio.create_task(persist_trends(history, stop))

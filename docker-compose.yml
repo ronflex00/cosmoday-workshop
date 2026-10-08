@@ -73,6 +73,7 @@ services:
       API_HISTORY_LIMIT: "120"
       TELEMETRY_STORAGE: trends
       AI_AUTO_ALARM: ${AI_AUTO_ALARM:-false}
+      AI_VISION_ALARM: ${AI_VISION_ALARM:-false}
       DATABASE_HOST: db
       POSTGRES_DB: ${POSTGRES_DB:-sentinel}
       POSTGRES_USER: ${POSTGRES_USER:-sentinel}
