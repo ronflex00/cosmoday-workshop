@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..config import database_url
 from ..models.schemas import (ALERTS_TOPIC, ANOMALY_TOPIC, TELEMETRY_TOPIC, VISION_TOPIC,
@@ -34,6 +35,11 @@ events = Table(
     Index("ix_sentinel_history_kind_id", "kind", "id"),
     Index("ix_sentinel_history_kind_ts", "kind", "ts"),
     Index("ix_sentinel_history_device_key", "kind", "device_key", "id"),
+)
+intelligence_state = Table(
+    "sentinel_environment_state", metadata,
+    Column("key", String(32), primary_key=True),
+    Column("data", JSON, nullable=False),
 )
 KINDS = {TELEMETRY_TOPIC: "telemetry", VISION_TOPIC: "vision", ANOMALY_TOPIC: "anomalies"}
 SCHEMAS = {"telemetry": SensorTelemetry, "vision": VisionResult,
@@ -71,11 +77,16 @@ class HistoryStore:
                 "device_key": sha256(device_id.encode()).hexdigest() if device_id is not None else None,
                 "data": payload.model_dump(mode="json")}
 
-    async def _write(self, rows: list[dict]) -> None:
+    async def _write(self, rows: list[dict], environment_state: dict | None = None) -> None:
         insert = postgres_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
-        statement = insert(events).values(rows).on_conflict_do_nothing(index_elements=["event_id", "kind"])
         async with self._lock, self.engine.begin() as connection:
-            await connection.execute(statement)
+            if rows:
+                statement = insert(events).values(rows).on_conflict_do_nothing(index_elements=["event_id", "kind"])
+                await connection.execute(statement)
+            if environment_state is not None:
+                statement = insert(intelligence_state).values(key="episode", data=environment_state)
+                await connection.execute(statement.on_conflict_do_update(
+                    index_elements=["key"], set_={"data": statement.excluded.data}))
         self.available = True
 
     async def append(self, event_id: str, received_at: datetime, change: StateChange) -> None:
@@ -85,8 +96,28 @@ class HistoryStore:
         if change.alert is not None:
             alert_event_id = change.alert.id if change.topic == ALERTS_TOPIC else event_id
             rows.append(self._record(alert_event_id, "alerts", ALERTS_TOPIC, received_at, change.alert))
-        if rows:
-            await self._write(rows)
+        for alert in change.additional_alerts:
+            rows.append(self._record(alert.id, "alerts", ALERTS_TOPIC, received_at, alert))
+        if rows or change.environment_state is not None:
+            await self._write(rows, change.environment_state)
+
+    async def environment_state(self, key: str) -> dict | None:
+        async with self._lock, self.engine.connect() as connection:
+            result = (await connection.execute(select(intelligence_state.c.data).where(
+                intelligence_state.c.key == key))).scalar_one_or_none()
+        return result
+
+    async def save_alarm_state(self, state: dict) -> None:
+        insert = postgres_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+        statement = insert(intelligence_state).values(key="manual", data=state)
+        try:
+            async with self._lock, self.engine.begin() as connection:
+                await connection.execute(statement.on_conflict_do_update(
+                    index_elements=["key"], set_={"data": statement.excluded.data}))
+        except (SQLAlchemyError, OSError, TimeoutError):
+            self.available = False
+            raise
+        self.available = True
 
     async def append_alert(self, alert: Alert) -> None:
         await self._write([self._record(alert.id, "alerts", ALERTS_TOPIC, datetime.now(timezone.utc), alert)])

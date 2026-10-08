@@ -33,6 +33,13 @@ Le broker doit se reconnecter pour que `mqtt_connected` soit vrai. Le frontend
 continue à signaler les données anciennes selon leur timestamp. La calibration
 IsolationForest appartient au service IA et reste en mémoire.
 
+La couche [AI Environment Intelligence](environment-intelligence.md) ajoute
+une table interne `sentinel_environment_state` pour mémoriser l'épisode
+critique et les commandes manuelles suivies. Les alertes critiques utilisent
+le type existant `ENVIRONMENTAL_ANOMALY` et sont consultables dans l'historique
+`alerts`. Les anciens historiques et leurs formats restent identiques ;
+aucune impulsion physique n'est rejouée à partir des données restaurées.
+
 ## PostgreSQL
 
 Le même backend utilise PostgreSQL si cette URL est configurée :

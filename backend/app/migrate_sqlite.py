@@ -11,7 +11,7 @@ import sqlite3
 from sqlalchemy import func, insert, select, text
 
 from .config import Settings
-from .services.history import HistoryStore, events, utc
+from .services.history import HistoryStore, events, intelligence_state, utc
 
 
 def snapshot(source: Path) -> Path:
@@ -27,12 +27,14 @@ def snapshot(source: Path) -> Path:
 
 
 async def import_history(backup: Path, connection) -> int:
-    if await connection.scalar(select(func.count()).select_from(events)):
+    if (await connection.scalar(select(func.count()).select_from(events))
+            or await connection.scalar(select(func.count()).select_from(intelligence_state))):
         raise ValueError("Destination history is not empty; import refused")
     if connection.dialect.name == "postgresql":
         # Prevent concurrent writers until commit, including accidental API startup.
-        await connection.execute(text("LOCK TABLE sentinel_history IN ACCESS EXCLUSIVE MODE"))
-        if await connection.scalar(select(func.count()).select_from(events)):
+        await connection.execute(text("LOCK TABLE sentinel_history, sentinel_environment_state IN ACCESS EXCLUSIVE MODE"))
+        if (await connection.scalar(select(func.count()).select_from(events))
+                or await connection.scalar(select(func.count()).select_from(intelligence_state))):
             raise ValueError("Destination history is not empty; import refused")
     count = 0
     with closing(sqlite3.connect(backup.resolve().as_uri() + "?mode=ro", uri=True)) as reader:
@@ -48,6 +50,11 @@ async def import_history(backup: Path, connection) -> int:
                 rows.append(item)
             await connection.execute(insert(events), rows)
             count += len(rows)
+        if reader.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sentinel_environment_state'").fetchone():
+            rows = [{"key": row["key"], "data": json.loads(row["data"])}
+                    for row in reader.execute("SELECT key, data FROM sentinel_environment_state")]
+            if rows:
+                await connection.execute(insert(intelligence_state), rows)
     if await connection.scalar(select(func.count()).select_from(events)) != count:
         raise ValueError("Imported row count does not match")
     if connection.dialect.name == "postgresql":

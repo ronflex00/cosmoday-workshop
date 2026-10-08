@@ -119,6 +119,15 @@ et 50 alertes ; l'historique complet est consultable par l'API.
 React charge d'abord REST, puis suit les mises à jour WebSocket avec reconnexion.
 Les commandes LED/buzzer passent par REST puis MQTT.
 
+La page `/environment` ajoute une interprétation des tendances et des épisodes
+IsolationForest (NORMAL, WATCH, WARNING, CRITICAL), en conservant ses panneaux
+existants. `AI_AUTO_ALARM=false` par défaut laisse cette interprétation et les
+événements actifs sans déclencher le matériel. Avec `true`, le backend orchestre
+un buzzer d'environ une seconde et une LED de cinq secondes par épisode critique,
+en préservant les commandes manuelles. Voir le [guide de l'intelligence
+environnementale](docs/environment-intelligence.md) pour le réarmement, les
+limites matérielles et les commandes de test.
+
 Le dashboard affiche les quatre capteurs, la présence humaine et sa confiance,
 CALIBRATING/NORMAL/ANOMALY avec le score IsolationForest, les courbes et les
 alertes. Les résultats absents ou périmés sont signalés et les commandes sont
@@ -179,11 +188,14 @@ Depuis la racine, après l'installation complète avec webcam :
 python3 -m unittest discover -s tests -v
 (cd ai && .venv/bin/python -m unittest discover -s tests -v)
 (cd backend && .venv/bin/python -m unittest discover -s tests -v)
+(cd frontend && npm test)
+(cd frontend && npm run typecheck)
 (cd frontend && npm run build)
 ```
 
-Cela couvre les 22 tests IA, les 46 tests backend, les deux tests de propriété
-des processus du lanceur et le build TypeScript/React. Les tests IA importent
+Cela couvre l'IA, le backend et sa persistance, les cycles d'alarme, les pages
+et l'interprétation frontend, la propriété des processus du lanceur et le build
+TypeScript/React. Les tests IA importent
 la vision ; ils nécessitent donc l'installation complète, même sans webcam
 branchée. L'installation `--no-camera` suffit pour les tests backend et lanceur.
 

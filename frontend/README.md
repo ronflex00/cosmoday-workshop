@@ -71,9 +71,9 @@ Les horloges du PC et des appareils doivent être synchronisées.
 - **AI Environment** : CALIBRATING lorsque `ready=false`, NORMAL lorsque
   `ready=true/anomaly=false`, ANOMALY lorsque `ready=true/anomaly=true`. Le score
   reste `—` pendant la calibration, puis s'affiche avec trois décimales.
-  CALIBRATING est orange, NORMAL vert et ANOMALY rouge. La sévérité backend
-  environnementale demeure `warning`, affichée en orange dans le statut global
-  et l'historique d'alertes.
+  CALIBRATING est orange, NORMAL vert et ANOMALY rouge. L'alerte initiale
+  environnementale reste `warning`, affichée en orange ; les épisodes
+  persistants ajoutent un événement de sévérité `critical` dans l'historique.
 - **Environmental trends** : trois courbes Recharts avec leurs unités propres,
   un maximum de 120 mesures réelles et des infobulles. Aucun point n'est inventé
   lorsque l'historique est vide.
@@ -81,6 +81,19 @@ Les horloges du PC et des appareils doivent être synchronisées.
   avec heure, type, message et sévérité. Les transitions et la déduplication sont
   gérées par le backend.
 - **Node controls** : activation et arrêt du buzzer/LED via l'API REST.
+- **AI ENVIRONMENT INTERPRETATION** sur `/environment` : observations des
+  tendances et persistance des résultats du modèle, avec NORMAL, WATCH,
+  WARNING et CRITICAL. Les données absentes, périmées, la calibration et MQTT
+  hors ligne disposent de fallbacks. `VITE_ENVIRONMENT_INTELLIGENCE=false`
+  masque uniquement cette nouvelle carte. Les autres panneaux sont conservés.
+
+La décision d'anomalie vient toujours d'IsolationForest. Une tendance seule
+peut produire WATCH, sans alarme physique. La qualification CRITICAL dépend
+de résultats anormaux persistants. Le navigateur n'envoie aucune commande
+automatique : `AI_AUTO_ALARM`, côté backend, contrôle les impulsions physiques
+et vaut `false` par défaut. L'alerte initiale reste `warning` ; un événement
+supplémentaire `critical` apparaît une fois par épisode. Voir le [workflow
+et les tests manuels](../docs/environment-intelligence.md).
 
 Le statut global donne priorité à CRITICAL pour une présence humaine actuelle,
 puis WARNING pour une anomalie environnementale actuelle, puis CALIBRATING.
@@ -181,6 +194,7 @@ voir les exemples d'URL, d'écoute réseau et de CORS dans le
 
 ```bash
 npm run typecheck
+npm test
 npm run build
 ```
 
