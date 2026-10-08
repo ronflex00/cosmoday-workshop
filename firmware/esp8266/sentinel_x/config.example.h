@@ -10,6 +10,13 @@ static const char* MQTT_USERNAME = "sentinel-esp";
 static const char* MQTT_PASSWORD = "CHANGE_ME";
 static const char* DEVICE_ID = "sentinel-01";
 
+// Current digital presence sensor is connected to D3.
+// -1 disables it and publishes presence=null. Never reuse a sensor/output pin.
+#define PRESENCE_SENSOR_PIN D3
+#define PRESENCE_SENSOR_ACTIVE_LEVEL HIGH
+// 0: one compact sensor log per acquisition; 1: also print MQTT JSON payloads.
+#define MQTT_VERBOSE_TELEMETRY 0
+
 // Paste ONLY the public ca.crt from the Pi, never ca.key or server.key.
 static const char MQTT_CA_CERT[] PROGMEM = R"PEM(
 -----BEGIN CERTIFICATE-----

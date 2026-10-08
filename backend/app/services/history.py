@@ -104,6 +104,19 @@ class HistoryStore:
             rows.append(self._record(alert.id, "alerts", ALERTS_TOPIC, received_at, alert))
         if rows or change.environment_state is not None:
             await self._write(rows, change.environment_state)
+        if aggregate:
+            # After durable alert writes: retries cannot double-count a sample.
+            start = utc(received_at).replace(second=0, microsecond=0)
+            key = (change.message.device_id, start)
+            if key not in self._minutes:
+                minute = Minute(change.message.device_id, start)
+                async with self._lock, self.engine.connect() as connection:
+                    existing = await connection.scalar(select(events.c.data).where(
+                        events.c.event_id == minute.event_id, events.c.kind == "telemetry_trends"))
+                if existing is not None:
+                    minute.resume(TelemetryTrend.model_validate(existing))
+                self._minutes[key] = minute
+            self._minutes[key].add(change.message)
 
     async def environment_state(self, key: str) -> dict | None:
         async with self._lock, self.engine.connect() as connection:
@@ -122,19 +135,6 @@ class HistoryStore:
             self.available = False
             raise
         self.available = True
-        if aggregate:
-            # After durable alert writes: retries cannot double-count a sample.
-            start = utc(received_at).replace(second=0, microsecond=0)
-            key = (change.message.device_id, start)
-            if key not in self._minutes:
-                minute = Minute(change.message.device_id, start)
-                async with self._lock, self.engine.connect() as connection:
-                    existing = await connection.scalar(select(events.c.data).where(
-                        events.c.event_id == minute.event_id, events.c.kind == "telemetry_trends"))
-                if existing is not None:
-                    minute.resume(TelemetryTrend.model_validate(existing))
-                self._minutes[key] = minute
-            self._minutes[key].add(change.message)
 
     async def flush_trends(self, *, now: datetime | None = None, final: bool = False) -> None:
         cutoff = utc(now or datetime.now(timezone.utc)).replace(second=0, microsecond=0)

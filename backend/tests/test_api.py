@@ -104,6 +104,7 @@ class APITests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json(), {"status": "published", "topic": "sentinel/commands",
                                                    "command": command})
+                self.assertEqual(client.get("/api/v1/state").json()["alarm_command"], command)
             self.assertEqual(app.state.mqtt.commands, [{"buzzer": True, "led": "red"},
                                                       {"buzzer": False, "led": "green"}])
             for payload in ({"buzzer": "true", "led": "red"}, {"buzzer": True, "led": "blue"},

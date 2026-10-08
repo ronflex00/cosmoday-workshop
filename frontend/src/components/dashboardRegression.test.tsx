@@ -40,6 +40,24 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('existing dashboards and message contracts remain usable', () => {
+  it('separates the presence sensor from ultrasonic proximity and no echo', () => {
+    const state = fixtures.socket.state!;
+    state.telemetry = { ...state.telemetry!, motion: true, distance_sensor: true,
+      distance_cm: null, presence: false };
+    expect(isSentinelState(state)).toBe(true);
+    const html = renderToStaticMarkup(<App />);
+    expect(html).toContain('distance-value');
+    expect(html).toContain('NO ECHO');
+    expect(html).toContain('presence-value');
+    expect(html).toContain('Presence sensor inactive');
+    expect(html).not.toContain('Presence within 80 cm');
+    state.telemetry.presence = true;
+    expect(renderToStaticMarkup(<App />)).toContain('Presence sensor active');
+    state.telemetry.presence = null;
+    expect(renderToStaticMarkup(<App />)).toContain('Awaiting presence sensor');
+    expect(isSentinelState({ ...state, telemetry: { ...state.telemetry, presence: 'true' } })).toBe(false);
+    expect(isSentinelState({ ...state, telemetry: { ...state.telemetry, distance_cm: -1 } })).toBe(false);
+  });
   it('renders Overview with live telemetry, alerts and both manual controls', () => {
     const html = renderToStaticMarkup(<App />);
     for (const label of ['Security overview', 'temperature-value', 'humidity-value', 'gas-value',

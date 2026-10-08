@@ -8,6 +8,7 @@ Type=simple
 User=sentinelpi1
 SupplementaryGroups=video tty
 WorkingDirectory=/home/sentinelpi1/cosmoday-workshop/display
+ExecStartPre=+/usr/bin/chmod g+w /dev/tty1
 ExecStart=/usr/bin/python3 /home/sentinelpi1/cosmoday-workshop/display/sentinel_dashboard.py --tty /dev/tty1
 Restart=on-failure
 RestartSec=5

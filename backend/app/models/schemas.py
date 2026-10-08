@@ -51,6 +51,7 @@ class SensorTelemetry(Timestamped, SensorFeatures):
     distance_sensor: StrictBool = False
     distance_cm: Number | None = Field(default=None, ge=0)
     presence: StrictBool | None = None
+    buzzer: StrictBool | None = None  # Actual output reported by the ESP.
 
     @field_validator("device_id")
     @classmethod
@@ -177,6 +178,8 @@ class CommandResult(PayloadModel):
 
 
 class SentinelState(PayloadModel):
+    alarm_command: Command | None = None
+    alarm_command_ts: datetime | None = None
     telemetry: SensorTelemetry | None = None
     device: DeviceStatus | None = None
     vision: VisionResult | None = None

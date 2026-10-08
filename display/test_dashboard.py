@@ -9,6 +9,29 @@ import sentinel_dashboard as dashboard
 
 
 class DisplayTests(unittest.TestCase):
+    def test_command_and_actual_buzzer_show_alert_only_while_current(self):
+        now = datetime.now(timezone.utc)
+        state = {'telemetry': {'ts': now.isoformat(), 'buzzer': False},
+                 'system': {'mqtt_connected': True}, 'device': {'online': True}}
+        region = (165, 168, 310, 227)
+        neutral = dashboard.render(state, True, now).crop(region).tobytes()
+        state['alarm_command'] = {'buzzer': True, 'led': 'red'}
+        alert = dashboard.render(state, True, now).crop(region).tobytes()
+        self.assertNotEqual(alert, neutral)
+        state['alarm_command']['buzzer'] = False
+        self.assertEqual(dashboard.render(state, True, now).crop(region).tobytes(), neutral)
+        state['telemetry']['buzzer'] = True
+        self.assertEqual(dashboard.render(state, True, now).crop(region).tobytes(), alert)
+        state['device']['online'] = False
+        self.assertNotEqual(dashboard.render(state, True, now).crop(region).tobytes(), alert)
+
+    def test_presence_is_strict_and_never_uses_legacy_motion(self):
+        self.assertEqual(dashboard.presence_reading(True, True), 'OUI')
+        self.assertEqual(dashboard.presence_reading(False, True), 'NON')
+        for value in (None, 'false', 0, 1):
+            self.assertEqual(dashboard.presence_reading(value, True), '—')
+        self.assertEqual(dashboard.presence_reading(True, False), '—')
+
     def test_rgb565_primary_colors(self):
         for color, expected in [('red', b'\x00\xf8'), ('lime', b'\xe0\x07'), ('blue', b'\x1f\x00')]:
             pixels = dashboard.rgb565(Image.new('RGB', dashboard.SIZE, color))

@@ -137,7 +137,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             saved_manual = await asyncio.wait_for(history.environment_state("manual"), timeout=6)
             environment = EnvironmentIntelligence.restore(list(app.state.store.anomaly_history), saved_episode)
             app.state.environment = environment
+            def command_published(command):
+                app.state.store.alarm_command = command
+                app.state.store.alarm_command_ts = datetime.now(timezone.utc)
+                app.state.sockets.broadcast(app.state.store.snapshot())
+
             alarm = AlarmOrchestrator(mqtt_client.publish_command, enabled=settings.ai_auto_alarm,
+                                      on_published=command_published,
                                       saved=saved_manual, persist=history.save_alarm_state,
                                       require_manual=app.state.store.system.last_update is not None)
             app.state.alarm = alarm

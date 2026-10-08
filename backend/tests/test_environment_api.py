@@ -54,7 +54,10 @@ class EnvironmentAPITests(unittest.TestCase):
             with client.websocket_connect("/ws") as ws:
                 initial = ws.receive_json()["data"]
                 self.assertEqual(set(initial), {"telemetry", "device", "vision", "anomaly", "system",
-                                                "history", "anomaly_history", "alerts"})
+                                                "history", "anomaly_history", "alerts",
+                                                "alarm_command", "alarm_command_ts"})
+                self.assertIsNone(initial["alarm_command"])
+                self.assertIsNone(initial["alarm_command_ts"])
                 for topic, payload in ((TELEMETRY_TOPIC, telemetry()), (VISION_TOPIC, vision())):
                     app.state.mqtt.events.put_nowait(MQTTEvent(topic, json.dumps(payload).encode()))
                     update = ws.receive_json()["data"]

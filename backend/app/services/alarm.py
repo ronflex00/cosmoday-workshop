@@ -20,10 +20,12 @@ class AlarmOrchestrator:
                  saved: dict | None = None,
                  persist: Callable[[dict], Awaitable[None]] | None = None,
                  require_manual: bool = False,
+                 on_published: Callable[[Command], None] | None = None,
                  sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
                  clock: Callable[[], float] = time.monotonic):
         self.enabled = enabled
         self._publish = publish
+        self._on_published = on_published
         self._persist = persist
         self._sleep = sleep
         self._clock = clock
@@ -84,6 +86,8 @@ class AlarmOrchestrator:
             success = False
         if success:
             self._last_sent = command
+            if self._on_published is not None:
+                self._on_published(command)
         return success
 
     def _cancel_pulse(self) -> None:

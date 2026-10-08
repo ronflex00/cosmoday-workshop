@@ -11,6 +11,7 @@ export interface SensorTelemetry extends SensorFeatures {
   distance_sensor?: boolean;
   distance_cm?: number | null;
   presence?: boolean | null;
+  buzzer?: boolean | null;
 }
 
 export interface TelemetryTrend extends SensorTelemetry {
@@ -21,6 +22,12 @@ export interface TelemetryTrend extends SensorTelemetry {
   motion_count: number;
   motion_transitions: number;
   last_motion: boolean;
+  distance_sample_count?: number;
+  distance_min_cm?: number | null;
+  distance_max_cm?: number | null;
+  no_echo_count?: number;
+  presence_sample_count?: number;
+  presence_count?: number;
 }
 
 export function isTelemetryTrend(value: unknown): value is TelemetryTrend {
@@ -64,6 +71,8 @@ export interface Alert {
 }
 
 export interface SentinelState {
+  alarm_command?: Command | null;
+  alarm_command_ts?: string | null;
   telemetry: SensorTelemetry | null;
   device?: DeviceStatus | null;
   vision: VisionResult | null;
@@ -109,7 +118,12 @@ function isFeatures(value: unknown): value is SensorFeatures {
 
 function isTelemetry(value: unknown): value is SensorTelemetry {
   return isRecord(value) && isFeatures(value) && typeof value.device_id === 'string'
-    && value.device_id.trim().length > 0 && isTimestamp(value.ts) && typeof value.motion === 'boolean';
+    && value.device_id.trim().length > 0 && isTimestamp(value.ts) && typeof value.motion === 'boolean'
+    && (value.distance_sensor === undefined || typeof value.distance_sensor === 'boolean')
+    && (value.distance_cm === undefined || value.distance_cm === null
+      || (isNumber(value.distance_cm) && value.distance_cm >= 0))
+    && (value.presence === undefined || value.presence === null || typeof value.presence === 'boolean')
+    && (value.buzzer === undefined || value.buzzer === null || typeof value.buzzer === 'boolean');
 }
 
 function isVision(value: unknown): value is VisionResult {

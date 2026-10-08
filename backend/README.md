@@ -19,8 +19,12 @@ Les messages incorrects sont ignorés avec un log ; ils ne remplacent pas le
 dernier état valide. Les payloads de plus de 16 Kio sont refusés.
 
 Le cache temps réel conserve au maximum 120 télémétries dans une `deque`.
-L'historique complet est conservé dans SQLite localement, ou PostgreSQL avec
-`DATABASE_URL`. Le backend recharge les données récentes et les alertes au
+La persistance utilise SQLite localement, ou PostgreSQL avec `DATABASE_URL`.
+En mode `TELEMETRY_STORAGE=trends` (déploiement Pi), la télémétrie est résumée
+par minute ; les alertes restent conservées individuellement. Les mesures
+distance et présence sont distinctes : `distance_cm` peut être null sans écho,
+et `presence` est le booléen du capteur numérique (null s'il est désactivé).
+Le backend recharge les données récentes et les alertes au
 redémarrage ; une coupure MQTT indique `mqtt_connected=false`.
 La reconnexion est automatique et renouvelle les abonnements.
 L'état de présence de l'ESP est exposé dans `state.device` et renouvelé par le

@@ -48,6 +48,12 @@ def number(value, digits=1):
     return f'{value:.{digits}f}'
 
 
+def presence_reading(value, fresh):
+    if not fresh or not isinstance(value, bool):
+        return '—'
+    return 'OUI' if value else 'NON'
+
+
 def render(state=None, reachable=False, now=None):
     now = now or datetime.now(timezone.utc)
     state = state if isinstance(state, dict) else {}
@@ -61,7 +67,10 @@ def render(state=None, reachable=False, now=None):
               and alert.get('severity') in ('warning', 'critical')
               and -5 <= age(alert.get('ts'), now) <= 60]
     mqtt_connected = reachable and system.get('mqtt_connected') is True
-    if mqtt_connected and any(a['severity'] == 'critical' for a in recent):
+    command = state.get('alarm_command') or {}
+    buzzer_active = fresh and telemetry.get('buzzer') is True
+    command_active = mqtt_connected and command.get('buzzer') is True
+    if buzzer_active or command_active or (mqtt_connected and any(a['severity'] == 'critical' for a in recent)):
         alert_status, alert_color = 'En alerte', RED
     elif mqtt_connected and recent:
         alert_status, alert_color = 'Avertissement', '#ffbd66'
@@ -73,7 +82,7 @@ def render(state=None, reachable=False, now=None):
     distance_ready = telemetry.get('distance_sensor') is True
     distance_value = 'Sans écho' if distance is None else number(distance)
     presence = telemetry.get('presence')
-    presence_value = 'À venir' if presence is None else 'OUI' if presence else 'NON'
+    presence_value = presence_reading(presence, fresh)
 
     image = Image.new('RGB', SIZE, BG)
     draw = ImageDraw.Draw(image)
@@ -93,7 +102,7 @@ def render(state=None, reachable=False, now=None):
         x, y = 10 + (index % 2) * 155, 36 + (index // 2) * 66
         draw.rounded_rectangle((x, y, x + 145, y + 59), radius=7, fill=background)
         draw.text((x + 10, y + 5), label, font=font(11), fill=accent)
-        visible = fresh if index < 4 else (presence is None or fresh) if index == 4 else True
+        visible = fresh if index < 4 else (fresh and isinstance(presence, bool)) if index == 4 else True
         value = value if visible else '—'
         value_font = font(23)
         for size in range(23, 11, -1):

@@ -35,6 +35,8 @@ class StateChange:
 class StateService:
     def __init__(self, history_limit: int = 120):
         self.telemetry = None
+        self.alarm_command = None
+        self.alarm_command_ts = None
         self.device = None
         self.vision = None
         self.anomaly = None
@@ -143,7 +145,8 @@ class StateService:
         self.system = SystemStatus(mqtt_connected=False, last_update=last_update)
 
     def snapshot(self) -> SentinelState:
-        return SentinelState(telemetry=self.telemetry, device=self.device, vision=self.vision,
+        return SentinelState(alarm_command=self.alarm_command, alarm_command_ts=self.alarm_command_ts,
+                             telemetry=self.telemetry, device=self.device, vision=self.vision,
                              anomaly=self.anomaly, system=self.system,
                              history=list(self.history),
                              anomaly_history=list(self.anomaly_history),

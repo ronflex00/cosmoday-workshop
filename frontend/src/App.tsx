@@ -38,7 +38,9 @@ function OverviewDashboard() {
   const online = connected && !!state?.system.mqtt_connected;
   const telemetry = state?.telemetry;
   const telemetryFresh = online && isFresh(telemetry?.ts, now);
-  const motionFresh = telemetryFresh && state?.device?.online !== false;
+  const sensorFresh = telemetryFresh && state?.device?.online !== false;
+  const presenceReady = typeof telemetry?.presence === 'boolean';
+  const distanceReady = telemetry?.distance_sensor === true;
   const visionFresh = online && isFresh(state?.vision?.ts, now);
   const anomalyFresh = online && isFresh(state?.anomaly?.ts, now);
 
@@ -69,11 +71,12 @@ function OverviewDashboard() {
         <section aria-labelledby="environment-title" id="environment">
           <div className="section-heading environment-heading"><h2 id="environment-title"><Activity size={16} aria-hidden="true" />Environment</h2>
             <span className="section-meta">{telemetry?.device_id || 'Awaiting sensor node'} · {formatTime(telemetry?.ts)}</span></div>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
             <SensorCard title="Temperature" value={formatNumber(telemetry?.temperature)} unit="°C" icon={Thermometer} detail={readingDetail} live={telemetryFresh} id="temperature-value" />
             <SensorCard title="Humidity" value={formatNumber(telemetry?.humidity)} unit="%" icon={Droplets} detail={readingDetail} live={telemetryFresh} id="humidity-value" />
             <SensorCard title="Gas" value={formatNumber(telemetry?.gas, true)} unit="raw" icon={Wind} detail={telemetryFresh ? 'Raw sensor value' : readingDetail} live={telemetryFresh} id="gas-value" />
-            <SensorCard title="Motion" value={!motionFresh ? 'UNKNOWN' : telemetry?.motion ? 'YES' : 'NO'} icon={Radio} detail={motionFresh ? telemetry?.motion ? 'Presence within 80 cm' : 'No nearby presence detected' : state?.device?.online === false ? 'Sensor node offline' : readingDetail} live={motionFresh} motion={motionFresh && !!telemetry?.motion} id="motion-value" />
+            <SensorCard title="Distance" value={!sensorFresh || !distanceReady ? 'UNKNOWN' : telemetry?.distance_cm == null ? 'NO ECHO' : formatNumber(telemetry.distance_cm)} unit={sensorFresh && distanceReady && telemetry?.distance_cm != null ? 'cm' : undefined} icon={Radio} detail={!sensorFresh ? readingDetail : !distanceReady ? 'Awaiting ultrasonic data' : telemetry?.distance_cm == null ? 'No return echo' : 'Ultrasonic distance'} live={sensorFresh && distanceReady} id="distance-value" />
+            <SensorCard title="Presence" value={!sensorFresh || !presenceReady ? 'UNKNOWN' : telemetry?.presence === true ? 'OUI' : 'NON'} icon={Activity} detail={!sensorFresh ? state?.device?.online === false ? 'Sensor node offline' : readingDetail : !presenceReady ? 'Awaiting presence sensor' : telemetry?.presence === true ? 'Presence sensor active' : 'Presence sensor inactive'} live={sensorFresh && presenceReady} motion={sensorFresh && presenceReady && telemetry?.presence === true} id="presence-value" />
           </div>
         </section>
 

@@ -7,6 +7,18 @@
 #include <DHT.h>
 #include <time.h>
 
+// Digital presence sensor wired to D3. The private config.h may override it.
+// Set the pin to -1 to publish presence=null when no sensor is connected.
+#ifndef PRESENCE_SENSOR_PIN
+#define PRESENCE_SENSOR_PIN D3
+#endif
+#ifndef PRESENCE_SENSOR_ACTIVE_LEVEL
+#define PRESENCE_SENSOR_ACTIVE_LEVEL HIGH
+#endif
+#ifndef MQTT_VERBOSE_TELEMETRY
+#define MQTT_VERBOSE_TELEMETRY 0
+#endif
+
 // ========================================================
 // SENTINEL-X
 // ESP8266 + HC-SR04 + MQ-2 + DHT11
@@ -69,13 +81,13 @@ PubSubClient mqttClient(wifiClient);
 
 
 // ========================================================
-// PRESENCE
+// ULTRASONIC PROXIMITY (legacy motion field)
 // ========================================================
 
-const float PRESENCE_DISTANCE_CM = 80.0;
+const float PROXIMITY_DISTANCE_CM = 80.0;
 
-bool presenceDetected = false;
-bool wasPresent = false;
+bool proximityDetected = false;
+bool presenceSensorDetected = false;
 
 float distanceCm = -1.0;
 
@@ -86,13 +98,7 @@ float distanceCm = -1.0;
 
 const int BUZZER_FREQUENCY = 2000;
 
-// Alerte locale = 1 seconde
-const unsigned long BUZZER_DURATION = 1000;
-
-bool localBuzzerActive = false;
 bool remoteBuzzerActive = false;
-
-unsigned long buzzerStartTime = 0;
 
 bool buzzerOutputActive = false;
 
@@ -101,68 +107,32 @@ bool buzzerOutputActive = false;
 // LED
 // ========================================================
 
-// Alerte locale = 5 secondes
-const unsigned long LED_DURATION = 5000;
-
-bool localLedActive = false;
 bool remoteLedActive = false;
-
-unsigned long ledStartTime = 0;
 
 
 // ========================================================
 // MQ-2
 // ========================================================
 
-const int MQ2_CALIBRATION_SAMPLES = 50;
 const int MQ2_AVERAGE_SAMPLES = 10;
-
-const int MQ2_WARNING_MARGIN = 40;
-const int MQ2_DANGER_MARGIN = 100;
-
-// 0 = NORMAL
-// 1 = ATTENTION
-// 2 = ANOMALIE
-int currentGasState = 0;
-int previousGasState = 0;
-
 int gasValue = 0;
-
-int gasBaseline = 0;
-int gasWarningThreshold = 0;
-int gasDangerThreshold = 0;
 
 
 // ========================================================
 // DHT11 / ENVIRONNEMENT
 // ========================================================
 
-const float TEMP_MIN = 15.0;
-const float TEMP_MAX = 30.0;
-
-const float HUMIDITY_MIN = 30.0;
-const float HUMIDITY_MAX = 70.0;
-
 float temperature = 0.0;
 float humidity = 0.0;
-
 bool dhtValid = false;
-
-bool environmentAnomaly = false;
-bool previousEnvironmentAnomaly = false;
-
-unsigned long lastDHTRead = 0;
-
-const unsigned long DHT_INTERVAL = 2000;
 
 
 // ========================================================
 // MQTT TELEMETRY
 // ========================================================
 
-unsigned long lastTelemetryPublish = 0;
-
-const unsigned long TELEMETRY_INTERVAL = 2000;
+unsigned long lastSensorRead = 0;
+const unsigned long SENSOR_INTERVAL = 2000;
 
 unsigned long lastMqttReconnect = 0;
 unsigned long lastWiFiReconnect = 0;
@@ -179,7 +149,6 @@ void applyOutputs() {
   // ------------------------------------------------------
 
   bool ledShouldBeOn =
-    localLedActive ||
     remoteLedActive;
 
   digitalWrite(
@@ -193,7 +162,6 @@ void applyOutputs() {
   // ------------------------------------------------------
 
   bool buzzerShouldBeOn =
-    localBuzzerActive ||
     remoteBuzzerActive;
 
 
@@ -223,88 +191,10 @@ void applyOutputs() {
 }
 
 
-// ========================================================
-// ALERTE LOCALE
-// LED = 5 secondes
-// BUZZER = 1 seconde
-// ========================================================
-
-void publishLocalAlert(const char* type, const char* message) {
-  if (!mqttClient.connected() || !clockSynchronized) return;
-  JsonDocument doc;
-  doc["ts"] = getTimestamp();
-  doc["type"] = type;
-  doc["severity"] = "warning";
-  doc["message"] = message;
-  char buffer[384];
-  if (measureJson(doc) >= sizeof(buffer)) return;
-  size_t size = serializeJson(doc, buffer, sizeof(buffer));
-  if (!mqttClient.publish(TOPIC_ALERTS, reinterpret_cast<const uint8_t*>(buffer), size, false)) {
-    Serial.println("Publication alerte locale impossible");
-  }
-}
-
-void triggerLocalAlert(const char* type, const char* message) {
-  // Local protections keep working even when Wi-Fi/MQTT is unavailable.
-  publishLocalAlert(type, message);
-
-  localLedActive = true;
-
-  ledStartTime = millis();
-
-
-  localBuzzerActive = true;
-
-  buzzerStartTime = millis();
-
-
-  applyOutputs();
-}
-
-
-// ========================================================
-// LED UNIQUEMENT
-// ========================================================
-
-void triggerLedOnly() {
-
-  localLedActive = true;
-
-  ledStartTime = millis();
-
-  applyOutputs();
-}
-
-
-// ========================================================
-// MISE A JOUR DES TIMERS
-// ========================================================
-
+// Outputs are controlled only by commands from the API/controller.
 void updateOutputs() {
-
-  // Buzzer après 1 seconde
-  if (
-    localBuzzerActive &&
-    millis() - buzzerStartTime >= BUZZER_DURATION
-  ) {
-
-    localBuzzerActive = false;
-  }
-
-
-  // LED après 5 secondes
-  if (
-    localLedActive &&
-    millis() - ledStartTime >= LED_DURATION
-  ) {
-
-    localLedActive = false;
-  }
-
-
   applyOutputs();
 }
-
 
 // ========================================================
 // MQ-2
@@ -329,122 +219,6 @@ int readMQ2() {
 
   return
     total / MQ2_AVERAGE_SAMPLES;
-}
-
-
-// ========================================================
-// CALIBRATION MQ-2
-// ========================================================
-
-void calibrateMQ2() {
-
-  Serial.println();
-  Serial.println(
-    "========================================"
-  );
-
-  Serial.println(
-    "CALIBRATION MQ-2"
-  );
-
-  Serial.println(
-    "Laissez le capteur dans un air normal"
-  );
-
-  Serial.println(
-    "========================================"
-  );
-
-
-  long total = 0;
-
-
-  for (
-    int i = 0;
-    i < MQ2_CALIBRATION_SAMPLES;
-    i++
-  ) {
-
-    int value =
-      analogRead(MQ2_PIN);
-
-
-    total += value;
-
-
-    Serial.print("Calibration ");
-
-    Serial.print(i + 1);
-
-    Serial.print("/");
-
-    Serial.print(
-      MQ2_CALIBRATION_SAMPLES
-    );
-
-    Serial.print(" : ");
-
-    Serial.println(value);
-
-
-    delay(100);
-  }
-
-
-  gasBaseline =
-    total /
-    MQ2_CALIBRATION_SAMPLES;
-
-
-  gasWarningThreshold =
-    gasBaseline +
-    MQ2_WARNING_MARGIN;
-
-
-  gasDangerThreshold =
-    gasBaseline +
-    MQ2_DANGER_MARGIN;
-
-
-  Serial.println();
-  Serial.println(
-    "========================================"
-  );
-
-  Serial.println(
-    "MQ-2 CALIBRE"
-  );
-
-
-  Serial.print(
-    "Baseline : "
-  );
-
-  Serial.println(
-    gasBaseline
-  );
-
-
-  Serial.print(
-    "Seuil ATTENTION : "
-  );
-
-  Serial.println(
-    gasWarningThreshold
-  );
-
-
-  Serial.print(
-    "Seuil ANOMALIE : "
-  );
-
-  Serial.println(
-    gasDangerThreshold
-  );
-
-  Serial.println(
-    "========================================"
-  );
 }
 
 
@@ -820,7 +594,7 @@ void publishTelemetry() {
   }
 
 
-  snprintf(
+  int payloadLength = snprintf(
     payload,
     sizeof(payload),
 
@@ -832,7 +606,8 @@ void publishTelemetry() {
     "\"motion\":%s,"
     "\"distance_sensor\":true,"
     "\"distance_cm\":%s,"
-    "\"presence\":null}",
+    "\"presence\":%s,"
+    "\"buzzer\":%s}",
 
     DEVICE_ID,
 
@@ -844,11 +619,18 @@ void publishTelemetry() {
 
     (float)gasValue,
 
-    presenceDetected
+    proximityDetected
       ? "true"
       : "false",
-    distanceJson
+    distanceJson,
+    PRESENCE_SENSOR_PIN < 0 ? "null" : presenceSensorDetected ? "true" : "false",
+    buzzerOutputActive ? "true" : "false"
   );
+
+  if (payloadLength < 0 || static_cast<size_t>(payloadLength) >= sizeof(payload)) {
+    Serial.println("MQTT: telemetry trop longue, publication refusee");
+    return;
+  }
 
 
   bool success =
@@ -858,20 +640,11 @@ void publishTelemetry() {
     );
 
 
-  Serial.println();
-
-  Serial.print(
-    "MQTT -> "
-  );
-
-  Serial.println(
-    TOPIC_TELEMETRY
-  );
-
-
-  Serial.println(
-    payload
-  );
+#if MQTT_VERBOSE_TELEMETRY
+  Serial.print("MQTT -> ");
+  Serial.println(TOPIC_TELEMETRY);
+  Serial.println(payload);
+#endif
 
 
   if (!success) {
@@ -892,6 +665,8 @@ void setup() {
   Serial.begin(115200);
 
   delay(1000);
+
+  if (PRESENCE_SENSOR_PIN >= 0) pinMode(PRESENCE_SENSOR_PIN, INPUT);
 
 
   // ------------------------------------------------------
@@ -988,8 +763,7 @@ void setup() {
   );
 
 
-  // MQ-2
-  calibrateMQ2();
+  // Raw MQ-2 values are interpreted by the environmental AI on the Pi.
 
 
   // Première lecture DHT
@@ -1128,352 +902,61 @@ void loop() {
   }
 
 
-  // ======================================================
-  // 1. HC-SR04
-  // ======================================================
+  // Measurements only: environmental AI decides alerts on the Pi.
+  // A single acquisition/report/publication cycle for every sensor.
+  // MQTT and output timers continue to run between measurements.
+  if (millis() - lastSensorRead < SENSOR_INTERVAL) {
+    delay(5);
+    return;
+  }
+  lastSensorRead = millis();
 
-  digitalWrite(
-    TRIG_PIN,
-    LOW
-  );
-
+  digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
-
-
-  digitalWrite(
-    TRIG_PIN,
-    HIGH
-  );
-
+  digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  distanceCm = duration == 0 ? -1.0 : duration * 0.0343 / 2.0;
+  proximityDetected = distanceCm >= 0 && distanceCm < PROXIMITY_DISTANCE_CM;
 
-
-  digitalWrite(
-    TRIG_PIN,
-    LOW
-  );
-
-
-  long duration =
-    pulseIn(
-      ECHO_PIN,
-      HIGH,
-      30000
-    );
-
-
-  if (duration == 0) {
-
-    distanceCm = -1;
-
-    presenceDetected =
-      false;
-
-    wasPresent =
-      false;
-
-
-    Serial.print(
-      "Distance : aucun echo"
-    );
-
-  } else {
-
-    distanceCm =
-      duration *
-      0.0343 /
-      2.0;
-
-
-    presenceDetected =
-      distanceCm <
-      PRESENCE_DISTANCE_CM;
-
-
-    Serial.print(
-      "Distance : "
-    );
-
-    Serial.print(
-      distanceCm,
-      1
-    );
-
-    Serial.print(
-      " cm | "
-    );
-
-
-    if (
-      presenceDetected
-    ) {
-
-      Serial.print(
-        "PROXIMITE"
-      );
-
-
-      wasPresent =
-        true;
-
-    } else {
-
-      Serial.print(
-        "CLEAR"
-      );
-
-
-      wasPresent =
-        false;
-    }
+  int presenceRaw = -1;
+  if (PRESENCE_SENSOR_PIN >= 0) {
+    presenceRaw = digitalRead(PRESENCE_SENSOR_PIN);
+    presenceSensorDetected = presenceRaw == PRESENCE_SENSOR_ACTIVE_LEVEL;
   }
 
+  gasValue = readMQ2();
+  float newHumidity = dht.readHumidity();
+  float newTemperature = dht.readTemperature();
+  dhtValid = !isnan(newHumidity) && !isnan(newTemperature);
+  if (dhtValid) {
+    humidity = newHumidity;
+    temperature = newTemperature;
 
-  // ======================================================
-  // 2. MQ-2
-  // ======================================================
-
-  gasValue =
-    readMQ2();
-
-
-  Serial.print(
-    " || GAZ : "
-  );
-
-  Serial.print(
-    gasValue
-  );
-
-  Serial.print(
-    "/1023 | "
-  );
-
-
-  if (
-    gasValue <
-    gasWarningThreshold
-  ) {
-
-    currentGasState = 0;
-
-    Serial.print(
-      "NORMAL"
-    );
-
-  } else if (
-    gasValue <
-    gasDangerThreshold
-  ) {
-
-    currentGasState = 1;
-
-    Serial.print(
-      "ATTENTION"
-    );
-
-  } else {
-
-    currentGasState = 2;
-
-    Serial.print(
-      "ANOMALIE"
-    );
   }
-
-
-  // Attention gaz -> LED 5 secondes
-  if (
-    currentGasState == 1 &&
-    previousGasState == 0
-  ) {
-
-    triggerLedOnly();
-  }
-
-
-  // Anomalie gaz -> LED 5 s + buzzer 1 s
-  if (
-    currentGasState == 2 &&
-    previousGasState != 2
-  ) {
-
-    Serial.print(
-      " -> ALERTE GAZ"
-    );
-
-    triggerLocalAlert("system", "ESP: seuil gaz critique MQ-2");
-  }
-
-
-  previousGasState =
-    currentGasState;
-
-
-  // ======================================================
-  // 3. DHT11
-  // ======================================================
-
-  if (
-    millis() -
-    lastDHTRead >=
-    DHT_INTERVAL
-  ) {
-
-    lastDHTRead =
-      millis();
-
-
-    float newHumidity =
-      dht.readHumidity();
-
-
-    float newTemperature =
-      dht.readTemperature();
-
-
-    if (
-      isnan(newHumidity) ||
-      isnan(newTemperature)
-    ) {
-
-      dhtValid =
-        false;
-
-
-      Serial.print(
-        " || DHT11 : ERREUR"
-      );
-
-    } else {
-
-      dhtValid =
-        true;
-
-
-      humidity =
-        newHumidity;
-
-
-      temperature =
-        newTemperature;
-
-
-      Serial.print(
-        " || TEMP : "
-      );
-
-      Serial.print(
-        temperature,
-        1
-      );
-
-      Serial.print(
-        " C"
-      );
-
-
-      Serial.print(
-        " | HUM : "
-      );
-
-      Serial.print(
-        humidity,
-        1
-      );
-
-      Serial.print(
-        " %"
-      );
-
-
-      environmentAnomaly =
-
-        temperature < TEMP_MIN ||
-
-        temperature > TEMP_MAX ||
-
-        humidity < HUMIDITY_MIN ||
-
-        humidity > HUMIDITY_MAX;
-
-
-      if (
-        environmentAnomaly &&
-        !previousEnvironmentAnomaly
-      ) {
-
-        Serial.print(
-          " -> ALERTE ENVIRONNEMENT"
-        );
-
-
-        // LED 5 s + buzzer 1 s
-        triggerLocalAlert("system", "ESP: seuil environnemental depasse");
-      }
-
-
-      previousEnvironmentAnomaly =
-        environmentAnomaly;
-    }
-  }
-
-
-  // ======================================================
-  // MQTT TELEMETRY TOUTES LES 2 SECONDES
-  // ======================================================
-
-  if (
-    millis() -
-    lastTelemetryPublish >=
-    TELEMETRY_INTERVAL
-  ) {
-
-    lastTelemetryPublish =
-      millis();
-
-
-    publishTelemetry();
-  }
-
-
-  // ======================================================
-  // SORTIES
-  // ======================================================
 
   updateOutputs();
-
-
-  Serial.print(
-    " || LED : "
-  );
-
-  Serial.print(
-    (localLedActive || remoteLedActive)
-      ? "ON"
-      : "OFF"
-  );
-
-
-  Serial.print(
-    " | BUZZER : "
-  );
-
-  Serial.print(
-    (localBuzzerActive || remoteBuzzerActive)
-      ? "ON"
-      : "OFF"
-  );
-
-
-  Serial.println();
-
-
-  // Keep MQTT/output timers serviced during the existing sensor cadence.
-  const unsigned long idleStart = millis();
-  while (millis() - idleStart < 200) {
-    if (mqttClient.connected()) mqttClient.loop();
-    updateOutputs();
-    delay(5);
+  Serial.print("DISTANCE : ");
+  if (distanceCm < 0) Serial.print("AUCUN ECHO");
+  else { Serial.print(distanceCm, 1); Serial.print(" cm"); }
+  Serial.print(" | PRESENCE : ");
+  if (presenceRaw < 0) Serial.print("NON CONFIGUREE");
+  else {
+    Serial.print(presenceSensorDetected ? "OUI" : "NON");
+    Serial.print(" (signal=");
+    Serial.print(presenceRaw == HIGH ? "HIGH" : "LOW");
+    Serial.print(")");
   }
+  Serial.print(" | GAZ : ");
+  Serial.print(gasValue);
+  Serial.print("/1023");
+  if (dhtValid) {
+    Serial.print(" | TEMP : "); Serial.print(temperature, 1); Serial.print(" C");
+    Serial.print(" | HUM : "); Serial.print(humidity, 1); Serial.print(" %");
+  } else Serial.print(" | DHT11 : ERREUR");
+  Serial.print(" | LED : "); Serial.print(remoteLedActive ? "ON" : "OFF");
+  Serial.print(" | BUZZER : "); Serial.println(remoteBuzzerActive ? "ON" : "OFF");
+
+  publishTelemetry();
 }
