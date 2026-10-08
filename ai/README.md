@@ -36,6 +36,15 @@ inférence à 320 pixels. Aucun visage n'est identifié.
 
 ## Installation PC Linux
 
+### Analyse environnement seule sur le Pi
+
+Depuis `ai/`, installer `requirements-environment.txt` dans un venv, puis lancer
+`python -m src.environment_main` après configuration MQTT/TLS dans `ai/.env`.
+Ce point d'entrée réutilise le modèle et les contrats existants, sans import
+OpenCV/YOLO ni accès caméra. Il analyse les mesures individuelles ; il n'ajoute
+pas encore de caractéristiques de tendance temporelle. L'apprentissage est
+recommencé au démarrage. Garder `AI_AUTO_ALARM=false` côté API durant la validation.
+
 Python **3.10 minimum** ; le Python fourni par l'OS convient si les wheels des
 dépendances sont disponibles. Le PC du workshop utilise Arch Linux et possède
 déjà un venv fonctionnel : pour valider ce projet, réutiliser `.venv` sans
