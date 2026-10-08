@@ -13,10 +13,53 @@ from sqlalchemy.engine import make_url
 
 from app.config import configured_database_url
 from app.migrate_sqlite import import_history, snapshot
-from app.services.history import HistoryStore, events
+from app.services.history import HistoryStore, events, intelligence_state
 
 
 class MigrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_import_preserves_episode_and_manual_ownership_without_replaying_commands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "intelligence.db"
+            old = HistoryStore(f"sqlite:///{source.as_posix()}")
+            target = HistoryStore("sqlite:///:memory:")
+            try:
+                await old.initialize()
+                await target.initialize()
+                saved = [{"key": "episode", "data": {"critical_active": True}},
+                         {"key": "manual", "data": {"manual": {"buzzer": True, "led": "red"},
+                                                      "cleanup_pending": True}}]
+                async with old.engine.begin() as connection:
+                    await connection.execute(intelligence_state.insert(), saved)
+                backup = snapshot(source)
+                async with target.engine.begin() as connection:
+                    self.assertEqual(await import_history(backup, connection), 0)
+                self.assertEqual(await target.environment_state("episode"), saved[0]["data"])
+                self.assertEqual(await target.environment_state("manual"), saved[1]["data"])
+                with self.assertRaises(ValueError):
+                    async with target.engine.begin() as connection:
+                        await import_history(backup, connection)
+            finally:
+                await old.close()
+                await target.close()
+
+    async def test_legacy_source_without_intelligence_table_still_imports(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "legacy.db"
+            old = HistoryStore(f"sqlite:///{source.as_posix()}")
+            target = HistoryStore("sqlite:///:memory:")
+            try:
+                await old.initialize()
+                async with old.engine.begin() as connection:
+                    await connection.exec_driver_sql("DROP TABLE sentinel_environment_state")
+                backup = snapshot(source)
+                await target.initialize()
+                async with target.engine.begin() as connection:
+                    self.assertEqual(await import_history(backup, connection), 0)
+                self.assertIsNone(await target.environment_state("manual"))
+            finally:
+                await old.close()
+                await target.close()
+
     async def test_copy_preserves_ids_and_refuses_nonempty_destination(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "old.db"

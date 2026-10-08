@@ -8,11 +8,13 @@ import {
 } from 'recharts';
 
 import Header from './Header';
+import EnvironmentInterpretationPanel from './EnvironmentInterpretationPanel';
 import StatusBadge from './StatusBadge';
 import { useNow } from '../hooks/useNow';
 import { useSentinelSocket } from '../hooks/useSentinelSocket';
 import { formatNumber, formatTime } from '../utils/format';
 import { isFresh } from '../utils/status';
+import { analyzeEnvironment, environmentIntelligenceEnabled } from '../utils/environmentAnalysis';
 import type { AnomalyResult, SensorTelemetry } from '../types/sentinel';
 
 type FeatureKey = 'temperature' | 'humidity' | 'gas';
@@ -160,6 +162,9 @@ export default function EnvironmentDashboard() {
   const anomalyHistory = state?.anomaly_history ?? [];
   const telemetryHistory = state?.history ?? [];
   const fresh = online && isFresh(anomaly?.ts, now);
+  const environmentAnalysis = useMemo(() => analyzeEnvironment({
+    telemetryHistory, anomaly, anomalyHistory, deviceId: state?.telemetry?.device_id, online, now,
+  }), [telemetryHistory, anomaly, anomalyHistory, state?.telemetry?.device_id, online, now]);
 
   const risk: { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' } =
     !online ? { label: 'OFFLINE', tone: 'neutral' }
@@ -229,6 +234,8 @@ export default function EnvironmentDashboard() {
             <span>{anomaly?.ready ? `${anomalyHistory.length} recent analyses` : 'Unsupervised baseline learning'}</span>
           </section>
         </div>
+
+        {environmentIntelligenceEnabled() && <EnvironmentInterpretationPanel analysis={environmentAnalysis} />}
 
         <section aria-labelledby="environment-trends-title">
           <div className="section-heading">

@@ -6,6 +6,15 @@ from app.config import BACKEND_DIR, Settings
 
 
 class ConfigTests(unittest.TestCase):
+    def test_auto_alarm_defaults_off_and_accepts_only_valid_boolean_values(self):
+        with patch.dict(os.environ, {}, clear=True), patch("app.config.load_dotenv"):
+            self.assertFalse(Settings.from_env().ai_auto_alarm)
+            for value in ("true", "1", "yes"):
+                with patch.dict(os.environ, {"AI_AUTO_ALARM": value}):
+                    self.assertTrue(Settings.from_env().ai_auto_alarm)
+            with patch.dict(os.environ, {"AI_AUTO_ALARM": "perhaps"}), self.assertRaises(ValueError):
+                Settings.from_env()
+
     def test_database_urls_and_password_redaction(self):
         with patch.dict(os.environ, {}, clear=True), patch("app.config.load_dotenv"):
             self.assertEqual(Settings.from_env().database_url, f"sqlite+aiosqlite:///{BACKEND_DIR / 'data/sentinel.db'}")
