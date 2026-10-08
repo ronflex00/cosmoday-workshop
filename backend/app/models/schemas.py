@@ -47,6 +47,10 @@ class SensorFeatures(PayloadModel):
 class SensorTelemetry(Timestamped, SensorFeatures):
     device_id: StrictStr = Field(min_length=1)
     motion: StrictBool
+    # motion remains the legacy proximity flag; presence is the future sensor.
+    distance_sensor: StrictBool = False
+    distance_cm: Number | None = Field(default=None, ge=0)
+    presence: StrictBool | None = None
 
     @field_validator("device_id")
     @classmethod
@@ -70,6 +74,12 @@ class TelemetryTrend(SensorTelemetry):
     motion_count: int = Field(ge=0)
     motion_transitions: int = Field(ge=0)
     last_motion: StrictBool
+    distance_sample_count: int = Field(default=0, ge=0)
+    distance_min_cm: Number | None = Field(default=None, ge=0)
+    distance_max_cm: Number | None = Field(default=None, ge=0)
+    no_echo_count: int = Field(default=0, ge=0)
+    presence_sample_count: int = Field(default=0, ge=0)
+    presence_count: int = Field(default=0, ge=0)
 
 
 class DeviceStatus(PayloadModel):

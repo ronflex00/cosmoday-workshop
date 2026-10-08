@@ -8,6 +8,9 @@ export interface SensorTelemetry extends SensorFeatures {
   device_id: string;
   ts: string;
   motion: boolean;
+  distance_sensor?: boolean;
+  distance_cm?: number | null;
+  presence?: boolean | null;
 }
 
 export interface TelemetryTrend extends SensorTelemetry {

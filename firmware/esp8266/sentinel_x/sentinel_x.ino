@@ -811,6 +811,14 @@ void publishTelemetry() {
 
   char payload[320];
 
+  // No echo is a normal absence of distance measurement, encoded as null.
+  char distanceJson[24];
+  if (distanceCm >= 0.0) {
+    snprintf(distanceJson, sizeof(distanceJson), "%.1f", distanceCm);
+  } else {
+    snprintf(distanceJson, sizeof(distanceJson), "null");
+  }
+
 
   snprintf(
     payload,
@@ -821,7 +829,10 @@ void publishTelemetry() {
     "\"temperature\":%.1f,"
     "\"humidity\":%.1f,"
     "\"gas\":%.1f,"
-    "\"motion\":%s}",
+    "\"motion\":%s,"
+    "\"distance_sensor\":true,"
+    "\"distance_cm\":%s,"
+    "\"presence\":null}",
 
     DEVICE_ID,
 
@@ -835,7 +846,8 @@ void publishTelemetry() {
 
     presenceDetected
       ? "true"
-      : "false"
+      : "false",
+    distanceJson
   );
 
 
@@ -1197,20 +1209,8 @@ void loop() {
     ) {
 
       Serial.print(
-        "PRESENCE"
+        "PROXIMITE"
       );
-
-
-      if (!wasPresent) {
-
-        Serial.print(
-          " -> ALERTE"
-        );
-
-
-        // LED 5 s + buzzer 1 s
-        triggerLocalAlert("intrusion", "ESP: presence de proximite HC-SR04");
-      }
 
 
       wasPresent =
