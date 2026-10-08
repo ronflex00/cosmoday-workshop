@@ -70,6 +70,7 @@ racine contient des paramètres d'infrastructure et n'est pas le profil local.
 | `CORS_ORIGINS` | `http://localhost:5173` | Origines HTTP(S) explicites, séparées par des virgules |
 | `API_HISTORY_LIMIT` | `120` | Nombre de points du cache temps réel, entre 1 et 120 |
 | `TELEMETRY_STORAGE` | `raw` | `trends` sur le Pi : direct complet, résumés persistants par minute ; voir le [guide](../docs/telemetry-trends.md) |
+| `AI_AUTO_ALARM` | `false` | Autoriser une impulsion physique par épisode critique IsolationForest ; l'interprétation et l'événement critique restent actifs si désactivé |
 | `DATABASE_URL` | `sqlite:///data/sentinel.db` | Base persistante ; chemins SQLite relatifs à `backend/`, ou URL PostgreSQL |
 | `DATABASE_PASSWORD_FILE` | vide | Alternative à `DATABASE_URL` : secret PostgreSQL avec `DATABASE_HOST` (db), `DATABASE_PORT` (5432), `POSTGRES_USER` et `POSTGRES_DB` (sentinel) |
 
@@ -201,6 +202,9 @@ Les alertes automatiques sont créées lors de l'activation d'une détection :
 
 - `INTRUSION` : présence humaine, sévérité `critical`.
 - `ENVIRONMENTAL_ANOMALY` : anomalie avec `ready=true`, sévérité `warning`.
+- `ENVIRONMENTAL_ANOMALY` de sévérité `critical` : un événement supplémentaire
+  lorsqu'au moins deux des trois derniers résultats IsolationForest distincts
+  sont anormaux ; un seul par épisode, réarmé après deux résultats normaux.
 - `SYSTEM` : MQTT connecté (`info`) ou déconnecté (`warning`).
 
 La première détection positive déclenche aussi une alerte. Les messages
@@ -208,6 +212,11 @@ positifs répétés n'en créent pas d'autres ; après un retour à `false`, une
 nouvelle activation peut en créer une. La calibration ne génère aucune alerte
 environnementale. Les échecs de connexion répétés ne dupliquent pas les alertes
 système.
+
+Pendant un épisode environnemental critique, une unique classification normale
+ne termine pas l'épisode : les retours à l'anomalie ne dupliquent pas l'alerte
+initiale `warning`. Deux résultats normaux consécutifs réarment cet épisode,
+puis une nouvelle anomalie peut créer une nouvelle alerte initiale.
 
 Une `deque` conserve les 50 dernières alertes, incluses dans REST et WebSocket.
 Toutes les alertes créées sont également enregistrées en base ; leurs identifiants
@@ -260,8 +269,16 @@ secondes la confirmation d'envoi par Paho dans un thread, sans bloquer la boucle
 asyncio. Cette réponse confirme l'envoi MQTT ; elle ne confirme pas l'action
 physique de l'ESP8266. Une connexion indisponible, un échec ou un délai dépassé
 donne `503`. Une commande refusée hors connexion n'est pas conservée pour être
-envoyée plus tard. Les détections créent des alertes ; l'activation LED/buzzer
-reste commandée explicitement via cet endpoint.
+activée plus tard. L'intention manuelle est enregistrée en base avant publication
+pour préserver son origine après redémarrage ; une écriture indisponible donne
+aussi `503`. STOP conserve une demande de nettoyage en cas d'échec et peut
+réessayer l'extinction à la reconnexion. Par défaut, seules les commandes manuelles activent les
+sorties distantes. `AI_AUTO_ALARM=true` autorise aussi une impulsion automatique
+orchestrée côté backend, indépendante du navigateur. Le contrôleur combine les
+états manuels et IA afin qu'une minuterie IA ne coupe pas une alarme manuelle.
+STOP ALARM annule l'impulsion courante. Les commandes distantes doivent passer
+par cet endpoint pour participer à cet arbitrage ; un second éditeur MQTT direct
+n'est pas suivi. Voir le [guide complet](../docs/environment-intelligence.md).
 
 ## Tests
 

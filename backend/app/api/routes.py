@@ -62,9 +62,9 @@ async def create_alert(payload: AlertCreate, request: Request):
 
 @router.post("/api/v1/commands", response_model=CommandResult)
 async def command(payload: Command, request: Request):
-    published = await asyncio.to_thread(request.app.state.mqtt.publish_command, payload)
+    published = await request.app.state.alarm.manual(payload)
     if not published:
-        raise HTTPException(status_code=503, detail="MQTT command publication unavailable")
+        raise HTTPException(status_code=503, detail="MQTT command publication or alarm ownership storage unavailable")
     return CommandResult(command=payload)
 
 

@@ -7,6 +7,7 @@ from queue import Empty, Queue
 from threading import Event
 from uuid import uuid4
 from datetime import datetime, timezone
+from dataclasses import replace
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,10 +16,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from .api.routes import router
 from .api.websocket import WebSocketManager, router as websocket_router
 from .config import Settings
-from .models.schemas import ALERTS_TOPIC
+from .models.schemas import ALERTS_TOPIC, ANOMALY_TOPIC
 from .mqtt.client import MQTTClient, MQTTEvent
 from .services.state import StateService
 from .services.history import HistoryStore
+from .services.environment import EnvironmentIntelligence, FRESH_SECONDS, FUTURE_SECONDS
+from .services.alarm import AlarmOrchestrator
 
 logger = logging.getLogger("API")
 
@@ -35,7 +38,8 @@ async def persist_trends(history: HistoryStore, stop: Event) -> None:
 
 async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Event,
                          sockets: WebSocketManager, mqtt_client: MQTTClient,
-                         history: HistoryStore) -> None:
+                         history: HistoryStore, environment: EnvironmentIntelligence,
+                         alarm: AlarmOrchestrator) -> None:
     while not stop.is_set() or not events.empty():
         try:
             event = await asyncio.to_thread(events.get, True, 0.2)
@@ -47,6 +51,27 @@ async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Ev
             else:
                 change = store.prepare_message(event.topic, event.payload)
             if change is not None:
+                decision = None
+                alarm_generation = alarm.generation
+                if change.topic == ANOMALY_TOPIC:
+                    if (environment.state["critical_active"]
+                            and change.message.model == "isolation_forest"
+                            and change.alert is not None
+                            and change.alert.type == "ENVIRONMENTAL_ANOMALY"
+                            and change.alert.severity == "warning"):
+                        # Preserve the first warning, then group intermittent
+                        # positives into the latched critical episode until its
+                        # two fresh normal results rearm the interpretation.
+                        change = replace(change, alert=None)
+                    transport_connected = (mqtt_client.connected and (event.generation is None
+                        or event.generation == mqtt_client.generation))
+                    decision = environment.prepare(change.message, connected=store.system.mqtt_connected
+                                                   and transport_connected)
+                elif change.topic is None and not change.message:
+                    decision = environment.prepare_disconnect()
+                if decision is not None:
+                    change = replace(change, environment_state=decision.state,
+                                     additional_alerts=(decision.alert,) if decision.alert else ())
                 while True:
                     try:
                         await asyncio.wait_for(history.append(event.id, event.received_at, change), timeout=6)
@@ -60,9 +85,23 @@ async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Ev
                             return
                         await asyncio.to_thread(stop.wait, 1)
                 store.apply_change(change)
+                if decision is not None:
+                    environment.commit(decision)
                 sockets.broadcast(store.snapshot())
                 if change.alert is not None and change.topic != ALERTS_TOPIC:
                     mqtt_client.publish_alert(change.alert)
+                for alert in change.additional_alerts:
+                    mqtt_client.publish_alert(alert)
+                if change.topic is None:
+                    await alarm.set_connected(change.message)
+                elif decision is not None and decision.alert is not None:
+                    sample_time = change.message.ts
+                    generation = event.generation
+                    def still_eligible(sample_time=sample_time, generation=generation):
+                        age = (datetime.now(timezone.utc) - sample_time).total_seconds()
+                        return (-FUTURE_SECONDS <= age <= FRESH_SECONDS and mqtt_client.connected
+                                and (generation is None or generation == mqtt_client.generation))
+                    alarm.critical(still_eligible, generation=alarm_generation)
         except Exception:
             logger.exception("Cannot process MQTT event; skipping")
         finally:
@@ -83,6 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         consumer = None
         trend_writer = None
         mqtt_client = None
+        alarm = None
         try:
             try:
                 await asyncio.wait_for(history.initialize(), timeout=10)
@@ -93,14 +133,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             mqtt_client = MQTTClient(settings, events)
             app.state.mqtt = mqtt_client
             app.state.sockets = WebSocketManager()
+            saved_episode = await asyncio.wait_for(history.environment_state("episode"), timeout=6)
+            saved_manual = await asyncio.wait_for(history.environment_state("manual"), timeout=6)
+            environment = EnvironmentIntelligence.restore(list(app.state.store.anomaly_history), saved_episode)
+            app.state.environment = environment
+            alarm = AlarmOrchestrator(mqtt_client.publish_command, enabled=settings.ai_auto_alarm,
+                                      saved=saved_manual, persist=history.save_alarm_state,
+                                      require_manual=app.state.store.system.last_update is not None)
+            app.state.alarm = alarm
             consumer = asyncio.create_task(consume_events(events, app.state.store, stop,
-                                                          app.state.sockets, mqtt_client, history))
+                                                          app.state.sockets, mqtt_client, history,
+                                                          environment, alarm))
             mqtt_client.start()
             if history.trends_only:
                 trend_writer = asyncio.create_task(persist_trends(history, stop))
             yield
         finally:
             try:
+                if alarm is not None:
+                    await alarm.close()
                 if mqtt_client is not None:
                     await asyncio.to_thread(mqtt_client.stop)
             finally:

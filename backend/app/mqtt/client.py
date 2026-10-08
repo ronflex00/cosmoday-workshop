@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from queue import Empty, Full, Queue
 from uuid import uuid4
@@ -21,12 +21,14 @@ class MQTTEvent:
     payload: bytes | bool
     id: str = field(default_factory=lambda: str(uuid4()))
     received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    generation: int | None = None
 
 
 class MQTTClient:
     def __init__(self, settings: Settings, events: Queue[MQTTEvent]):
         self.settings = settings
         self.events = events
+        self.generation = 0
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
@@ -48,6 +50,7 @@ class MQTTClient:
                     self.settings.mqtt_port, self.settings.mqtt_tls)
 
     def _enqueue(self, event: MQTTEvent) -> None:
+        event = replace(event, generation=self.generation)
         try:
             self.events.put_nowait(event)
         except Full:
@@ -66,6 +69,7 @@ class MQTTClient:
             logger.warning("Event queue full; dropping incoming MQTT event")
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
+        self.generation += 1
         if reason_code.is_failure:
             self._enqueue(MQTTEvent(None, False))
             logger.warning("Connection rejected: %s; retrying", reason_code)
@@ -84,11 +88,13 @@ class MQTTClient:
             logger.info("Subscribed %s", topic)
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties):
+        self.generation += 1
         self._enqueue(MQTTEvent(None, False))
         if reason_code.is_failure:
             logger.warning("Disconnected: %s; reconnecting", reason_code)
 
     def _on_connect_fail(self, client, userdata):
+        self.generation += 1
         self._enqueue(MQTTEvent(None, False))
         logger.warning("Broker unavailable %s:%s; retrying", self.settings.mqtt_host,
                        self.settings.mqtt_port)
@@ -121,6 +127,10 @@ class MQTTClient:
         if published:
             logging.getLogger("COMMAND").info("Published %s", COMMANDS_TOPIC)
         return published
+
+    @property
+    def connected(self) -> bool:
+        return self.client.is_connected()
 
     def publish_alert(self, alert: Alert) -> bool:
         # Alerts are stored locally even if the broker is offline. Do not replay them.

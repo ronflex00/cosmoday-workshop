@@ -44,6 +44,7 @@ def configuration():
     defaults = dict(MQTT_HOST='localhost', MQTT_PORT='18883', MQTT_TLS='false',
                     MQTT_USERNAME='', MQTT_PASSWORD='', MQTT_TLS_CA='', MQTT_TLS_CERT='', MQTT_TLS_KEY='',
                     API_HOST='127.0.0.1', API_PORT='8000', FRONTEND_HOST='localhost', FRONTEND_PORT='5173',
+                    AI_AUTO_ALARM='false',
                     AI_VISION_STREAM_HOST='127.0.0.1', AI_VISION_STREAM_PORT='8765',
                     AI_CAMERA_INDEX='0', AI_SHOW_WINDOW='false', AI_TRAINING_SAMPLES='20',
                     AI_CONTAMINATION='0.1', AI_LOG_LEVEL='INFO', OMP_NUM_THREADS='2', PYTHONUNBUFFERED='1')

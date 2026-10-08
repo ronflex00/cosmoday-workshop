@@ -103,6 +103,7 @@ class Settings:
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)
     history_limit: int = 120
     telemetry_storage: str = "raw"
+    ai_auto_alarm: bool = False
     database_url: str = field(default_factory=default_database_url, repr=False)
 
     @classmethod
@@ -145,4 +146,5 @@ class Settings:
                    mqtt_tls_cert=cert, mqtt_tls_key=key,
                    api_host=api_host, api_port=_port("API_PORT", 8000), telemetry_storage=telemetry_storage,
                    cors_origins=origins, history_limit=history_limit,
+                   ai_auto_alarm=_boolean("AI_AUTO_ALARM"),
                    database_url=configured_database_url())

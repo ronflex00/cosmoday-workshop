@@ -27,6 +27,9 @@ class StateChange:
     topic: str | None
     message: SensorTelemetry | VisionResult | AnomalyResult | DeviceStatus | AlertCreate | bool
     alert: Alert | None
+    # Internal additive metadata; never included in MQTT/REST/WS payloads.
+    additional_alerts: tuple[Alert, ...] = ()
+    environment_state: dict | None = None
 
 
 class StateService:
@@ -113,6 +116,8 @@ class StateService:
             self.device = change.message
         if change.alert:
             self.alerts.record(change.alert)
+        for alert in change.additional_alerts:
+            self.alerts.record(alert)
         self.system = SystemStatus(mqtt_connected=self.system.mqtt_connected,
                                    last_update=datetime.now(timezone.utc))
 
