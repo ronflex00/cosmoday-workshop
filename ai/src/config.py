@@ -54,6 +54,8 @@ class Config:
     vision_stream_origin: str = "http://localhost:5173"
     training_samples: int = 20
     contamination: float = 0.1
+    environment_model_path: str = str(Path(__file__).resolve().parents[1] / "models" / "environment.joblib")
+    environment_retrain: bool = False
     log_level: str = "INFO"
 
     @classmethod
@@ -117,5 +119,7 @@ class Config:
             vision_stream_origin=stream_origin,
             training_samples=_integer("AI_TRAINING_SAMPLES", 20, minimum=2),
             contamination=contamination,
+            environment_model_path=_value("AI_ENVIRONMENT_MODEL_PATH", str(ai_dir / "models" / "environment.joblib")),
+            environment_retrain=_boolean("AI_ENVIRONMENT_RETRAIN"),
             log_level=log_level,
         )

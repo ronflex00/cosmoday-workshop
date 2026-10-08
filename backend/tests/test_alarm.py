@@ -90,6 +90,38 @@ class AlarmTests(unittest.IsolatedAsyncioTestCase):
         await self.alarm.manual(Command(buzzer=False, led="green"))
         self.assertEqual(self.commands[-1][1], {"buzzer": False, "led": "green"})
 
+    async def test_environment_double_beep_and_camera_cannot_interrupt(self):
+        self.alarm.critical(beeps=2)
+        await eventually(lambda: len(self.commands) == 1 and self.clock.waiters)
+        self.clock.advance(0.5)
+        await eventually(lambda: len(self.commands) == 2 and self.clock.waiters)
+        self.alarm.critical(beeps=1)
+        await eventually(lambda: not self.alarm._starts)
+        self.assertEqual(len(self.commands), 2)
+        self.clock.advance(0.3)
+        await eventually(lambda: len(self.commands) == 3 and self.clock.waiters)
+        self.clock.advance(0.5)
+        await eventually(lambda: len(self.commands) == 4 and self.clock.waiters)
+        self.clock.advance(3.7)
+        await eventually(lambda: len(self.commands) == 5 and not self.alarm._cleanup_needed)
+        self.assertEqual(self.commands, [
+            (0, {"buzzer": True, "led": "red"}),
+            (0.5, {"buzzer": False, "led": "red"}),
+            (0.8, {"buzzer": True, "led": "red"}),
+            (1.3, {"buzzer": False, "led": "red"}),
+            (5, {"buzzer": False, "led": "green"}),
+        ])
+
+    async def test_stop_between_double_beeps_prevents_second_beep(self):
+        self.alarm.critical(beeps=2)
+        await eventually(lambda: len(self.commands) == 1 and self.clock.waiters)
+        self.clock.advance(0.5)
+        await eventually(lambda: len(self.commands) == 2 and self.clock.waiters)
+        await self.alarm.manual(Command(buzzer=False, led="green"))
+        self.clock.advance(10)
+        await asyncio.sleep(0)
+        self.assertEqual([command["buzzer"] for _, command in self.commands], [True, False, False])
+
     async def test_manual_red_led_is_preserved_after_ai_red_expires(self):
         await self.start_pulse()
         await self.alarm.manual(Command(buzzer=False, led="red"))

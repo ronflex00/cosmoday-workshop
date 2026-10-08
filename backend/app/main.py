@@ -111,7 +111,8 @@ async def consume_events(events: Queue[MQTTEvent], store: StateService, stop: Ev
                         age = (datetime.now(timezone.utc) - sample_time).total_seconds()
                         return (-FUTURE_SECONDS <= age <= FRESH_SECONDS and mqtt_client.connected
                                 and (generation is None or generation == mqtt_client.generation))
-                    alarm.critical(still_eligible, generation=alarm_generation)
+                    alarm.critical(still_eligible, generation=alarm_generation,
+                                   beeps=2 if environment_trigger else 1)
         except Exception:
             logger.exception("Cannot process MQTT event; skipping")
         finally:

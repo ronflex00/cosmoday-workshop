@@ -72,7 +72,9 @@ def main(*, run_environment: bool = True) -> int:
         telemetry_queue = Queue(maxsize=128) if run_environment else None
         mqtt_client = MQTTClient(config, telemetry_queue)
         if run_environment:
-            anomaly_detector = AnomalyDetector(config.training_samples, config.contamination)
+            anomaly_detector = AnomalyDetector(config.training_samples, config.contamination,
+                                               model_path=config.environment_model_path,
+                                               retrain=config.environment_retrain)
             anomaly_worker = Thread(target=process_telemetry,
                                     args=(telemetry_queue, anomaly_detector, mqtt_client, stop),
                                     name="anomaly-worker")

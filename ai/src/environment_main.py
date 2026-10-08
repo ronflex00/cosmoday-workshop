@@ -23,7 +23,9 @@ def main() -> int:
         for sig in (signal.SIGINT, signal.SIGTERM):
             previous_handlers[sig] = signal.signal(sig, lambda *_: stop.set())
         telemetry_queue = Queue(maxsize=128)
-        detector = AnomalyDetector(config.training_samples, config.contamination)
+        detector = AnomalyDetector(config.training_samples, config.contamination,
+                                   model_path=config.environment_model_path,
+                                   retrain=config.environment_retrain)
         client = MQTTClient(config, telemetry_queue)
         logging.getLogger("AI").info("Starting environment analysis only (no camera)")
         client.start()

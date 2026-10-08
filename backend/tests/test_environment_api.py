@@ -141,6 +141,26 @@ class EnvironmentAPITests(unittest.TestCase):
                 self.assertEqual(len(published), 3)
                 self.assertEqual(app.state.mqtt.commands, [])
 
+    def test_critical_episode_double_beeps_and_keeps_durable_analysis(self):
+        app = self.app(enabled=True)
+        with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:
+            wait_connected(client)
+            self.enqueue(app, 0)
+            self.enqueue(app, 1)
+            self.wait(lambda: len(app.state.mqtt.commands) >= 4)
+            self.assertEqual(app.state.mqtt.commands[:4], [
+                {"buzzer": True, "led": "red"},
+                {"buzzer": False, "led": "red"},
+                {"buzzer": True, "led": "red"},
+                {"buzzer": False, "led": "red"},
+            ])
+            self.assertEqual(len(self.critical(client)), 1)
+            self.assertTrue(app.state.environment.state["critical_active"])
+            self.assertEqual(len(client.get("/api/v1/history/anomalies").json()["items"]), 2)
+            alerts = client.get("/api/v1/history/alerts").json()["items"]
+            self.assertEqual(len([row for row in alerts if row["data"]["severity"] == "critical"]), 1)
+            self.assertTrue(client.get("/api/v1/ai/status").json()["anomaly"]["ready"])
+
     def test_critical_grouping_preserves_other_models_legacy_warning_alerts(self):
         app = self.app()
         with patch("app.main.MQTTClient", FakeMQTT), TestClient(app) as client:

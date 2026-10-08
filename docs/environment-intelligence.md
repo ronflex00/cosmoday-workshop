@@ -72,15 +72,18 @@ Le navigateur ne pilote jamais les alarmes automatiques. Avec
 | Temps après activation | Sans alarme manuelle active |
 | --- | --- |
 | 0 seconde | `{"buzzer":true,"led":"red"}` |
-| Environ 1 seconde | `{"buzzer":false,"led":"red"}` |
+| 0,5 seconde | `{"buzzer":false,"led":"red"}` |
+| 0,8 seconde | `{"buzzer":true,"led":"red"}` |
+| 1,3 seconde | `{"buzzer":false,"led":"red"}` |
 | Environ 5 secondes | `{"buzzer":false,"led":"green"}` |
 
 Les publications sont sérialisées et calculées à partir de l'état manuel et
 de l'état IA. Si ACTIVATE ALARM a activé le buzzer, la fin de l'impulsion IA
 le conserve actif. Une LED rouge demandée manuellement reste également active.
 STOP ALARM annule l'impulsion IA et demande l'arrêt des sorties distantes.
-Les protections locales du firmware restent indépendantes : celui-ci combine
-déjà les sorties locales et distantes par un OU logique.
+L'environnement utilise deux bips de 0,5 seconde séparés par 0,3 seconde.
+La caméra conserve son bip unique et ne peut pas interrompre une impulsion
+critique environnement déjà en cours.
 
 Toutes les commandes manuelles distantes doivent passer par
 `POST /api/v1/commands`. Le contrat MQTT n'indique ni origine ni état physique :

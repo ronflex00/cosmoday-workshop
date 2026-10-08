@@ -1,7 +1,6 @@
 """Own the backend's remote command output while preserving manual intent.
 
-Firmware independently ORs its local alarm with these remote commands. Other
-publishers cannot communicate their origin in the existing command contract;
+Other publishers cannot communicate their origin in the existing command contract;
 managed manual commands therefore enter through the existing REST endpoint.
 """
 
@@ -39,6 +38,7 @@ class AlarmOrchestrator:
         self._closing = False
         self._last_sent: Command | None = None
         self._pulse: asyncio.Task | None = None
+        self._pulse_beeps = 1
         self._retry: asyncio.Task | None = None
         self._starts: set[asyncio.Task] = set()
         self._generation = 0
@@ -194,22 +194,28 @@ class AlarmOrchestrator:
                 await self._save()
             return success
 
-    def critical(self, eligible: Callable[[], bool] | None = None, *, generation: int | None = None) -> None:
+    def critical(self, eligible: Callable[[], bool] | None = None, *, generation: int | None = None,
+                 beeps: int = 1) -> None:
+        if beeps not in (1, 2):
+            raise ValueError("Alarm supports one or two beeps")
         if not self.enabled or self._closing:
             return
         if not self._manual_known:
             logger.warning("Automatic alarm suppressed: establish remote ownership with a manual REST command")
             return
-        task = asyncio.create_task(self._start_pulse(self._generation if generation is None else generation, eligible))
+        task = asyncio.create_task(self._start_pulse(self._generation if generation is None else generation, eligible, beeps))
         self._starts.add(task)
         task.add_done_callback(self._starts.discard)
 
-    async def _start_pulse(self, generation: int, eligible: Callable[[], bool] | None) -> None:
+    async def _start_pulse(self, generation: int, eligible: Callable[[], bool] | None, beeps: int) -> None:
         async with self._lock:
             if (self._closing or not self._connected or generation != self._generation
                     or (eligible is not None and not eligible())):
                 return
+            if self._pulse is not None and not self._pulse.done() and beeps < self._pulse_beeps:
+                return  # A camera notification must not interrupt the critical double beep.
             self._cancel_pulse()
+            self._pulse_beeps = beeps
             self._ai_buzzer = self._ai_led = True
             self._cleanup_needed = True
             # Record ownership before ON so a crash can safely restore manual
@@ -227,15 +233,19 @@ class AlarmOrchestrator:
                     self._ensure_retry()
                 return
             started = self._clock()
-            self._pulse = asyncio.create_task(self._finish_pulse(started))
+            self._pulse = asyncio.create_task(self._finish_pulse(started, beeps))
 
-    async def _finish_pulse(self, started: float) -> None:
+    async def _finish_pulse(self, started: float, beeps: int) -> None:
         try:
-            await self._sleep(max(0, started + 1 - self._clock()))
-            async with self._lock:
-                self._ai_buzzer = False
-                if self._connected and not await self._send():
-                    self._ensure_retry()
+            transitions = ((0.5, False), (0.8, True), (1.3, False)) if beeps == 2 else ((1, False),)
+            for deadline, active in transitions:
+                await self._sleep(max(0, started + deadline - self._clock()))
+                async with self._lock:
+                    self._ai_buzzer = active
+                    if self._connected and not await self._send():
+                        self._ai_buzzer = False
+                        self._ensure_retry()
+                        break  # Never retry a failed second ON as another beep.
             await self._sleep(max(0, started + 5 - self._clock()))
             async with self._lock:
                 self._ai_led = False
